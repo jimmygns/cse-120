@@ -284,7 +284,15 @@ public class KThread {
 		Lib.debug(dbgThread, "Joining to thread: " + toString());
 
 		Lib.assertTrue(this != currentThread);
-
+		if(this.status==statusFinished)
+			return;
+		//check with tutor
+		currentThread.status = statusBlocked;
+		KThread pre = currentThread;
+		currentThread=this;		
+		currentThread.runThread();
+		pre.ready();
+		runNextThread();
 	}
 
 	/**

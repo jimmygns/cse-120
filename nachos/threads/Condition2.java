@@ -21,6 +21,7 @@ public class Condition2 {
 	 */
 	public Condition2(Lock conditionLock) {
 		this.conditionLock = conditionLock;
+		
 	}
 
 	/**
@@ -33,6 +34,8 @@ public class Condition2 {
 		Lib.assertTrue(conditionLock.isHeldByCurrentThread());
 
 		conditionLock.release();
+		KThread.sleep();
+		
 
 		conditionLock.acquire();
 	}
