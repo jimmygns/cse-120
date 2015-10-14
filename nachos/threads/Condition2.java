@@ -24,6 +24,7 @@ public class Condition2 {
 	 */
 	public Condition2(Lock conditionLock) {
 		this.conditionLock = conditionLock;
+		this.waitingList = new LinkedList<KThread>();
 		
 	}
 
@@ -34,14 +35,14 @@ public class Condition2 {
 	 * reacquire the lock before <tt>sleep()</tt> returns.
 	 */
 	public void sleep() {
-		Machine.interrupt().disable();
+		boolean intStatus = Machine.interrupt().disable();
 		Lib.assertTrue(conditionLock.isHeldByCurrentThread());
 		
 		conditionLock.release();
-		
-		
-
+		waitingList.add(KThread.currentThread());
+		KThread.sleep();
 		conditionLock.acquire();
+		Machine.interrupt().restore(intStatus);
 	}
 
 	/**
@@ -49,7 +50,11 @@ public class Condition2 {
 	 * current thread must hold the associated lock.
 	 */
 	public void wake() {
+		boolean intStatus = Machine.interrupt().disable();
 		Lib.assertTrue(conditionLock.isHeldByCurrentThread());
+		if(!waitingList.isEmpty())
+			waitingList.poll().ready();
+		Machine.interrupt().restore(intStatus);
 	}
 
 	/**
@@ -57,7 +62,12 @@ public class Condition2 {
 	 * thread must hold the associated lock.
 	 */
 	public void wakeAll() {
+		boolean intStatus = Machine.interrupt().disable();
 		Lib.assertTrue(conditionLock.isHeldByCurrentThread());
+		while(!waitingList.isEmpty()){
+			this.wake();
+		}
+		Machine.interrupt().restore(intStatus);
 	}
 	
 	
@@ -77,7 +87,7 @@ public class Condition2 {
 	            while(list.isEmpty()){
 	                empty.sleep();
 	            }
-	            Lib.assertTrue(list.size() == 5, "List should have 5 values.");
+	            Lib.assertTrue(list.size() == 500, "List should have 5 values.");
 	            while(!list.isEmpty()) {
 	                System.out.println("Removed " + list.removeFirst());
 	            }
@@ -88,7 +98,7 @@ public class Condition2 {
 	    KThread producer = new KThread( new Runnable () {
 	        public void run() {
 	            lock.acquire();
-	            for (int i = 0; i < 5; i++) {
+	            for (int i = 0; i < 500; i++) {
 	                list.add(i);
 	                System.out.println("Added " + i);
 	            }
@@ -106,5 +116,5 @@ public class Condition2 {
 	}
 
 	private Lock conditionLock;
-	private Queue<KThread> waitingList;
+	private LinkedList<KThread> waitingList;
 }
