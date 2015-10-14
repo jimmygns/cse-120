@@ -1,5 +1,7 @@
 package nachos.threads;
 
+import java.util.Queue;
+
 import nachos.machine.*;
 
 /**
@@ -57,4 +59,5 @@ public class Condition2 {
 	}
 
 	private Lock conditionLock;
+	private Queue<KThread> waitingList;
 }
