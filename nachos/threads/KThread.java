@@ -193,9 +193,8 @@ public class KThread {
 	 */
 	public static void finish() {
 		Lib.debug(dbgThread, "Finishing thread: " + currentThread.toString());
-
-		Machine.interrupt().disable();
-
+		boolean intStatus = Machine.interrupt().disable();
+	
 		Machine.autoGrader().finishingCurrentThread();
 		if(currentThread.parentThread!=null)
 			currentThread.parentThread.ready();
@@ -206,7 +205,7 @@ public class KThread {
 		currentThread.status = statusFinished;
 		
 		sleep();
-		Machine.interrupt().enable();
+		Machine.interrupt().restore(intStatus);
 	}
 
 	/**
@@ -288,7 +287,7 @@ public class KThread {
 	//A calls on B.join()
 	//this == B
 	public void join() {
-		Machine.interrupt().disable();
+		boolean intStatus = Machine.interrupt().disable();
 		Lib.debug(dbgThread, "Joining to thread: " + toString());
 
 		Lib.assertTrue(this != currentThread);
@@ -304,6 +303,7 @@ public class KThread {
 		//check with tutor
 		this.parentThread = currentThread;
 		sleep();
+		Machine.interrupt().restore(intStatus);
 	}
 
 	/**
@@ -436,7 +436,7 @@ public class KThread {
 		
 		KThread t1 = new KThread( new Runnable () {
 	        public void run() {
-	            for (int i = 0; i < 5; i++) {
+	            for (int i = 0; i < 150; i++) {
 	                System.out.println("i = " + i);
 	            }
 	        }
@@ -448,8 +448,8 @@ public class KThread {
 	    System.out.println("t1 finished? " + (t1.status == statusFinished));
 	    Lib.assertTrue((t1.status == statusFinished), " Expected t1 to be finished.");
 
-		new KThread(new PingTest(1)).setName("forked thread").fork();
-		new PingTest(0).run();
+		//new KThread(new PingTest(1)).setName("forked thread").fork();
+		//new PingTest(0).run();
 	}
 
 	private static final char dbgThread = 't';

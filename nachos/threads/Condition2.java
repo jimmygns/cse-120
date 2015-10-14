@@ -1,5 +1,6 @@
 package nachos.threads;
 
+import java.util.LinkedList;
 import java.util.Queue;
 
 import nachos.machine.*;
@@ -33,10 +34,11 @@ public class Condition2 {
 	 * reacquire the lock before <tt>sleep()</tt> returns.
 	 */
 	public void sleep() {
+		Machine.interrupt().disable();
 		Lib.assertTrue(conditionLock.isHeldByCurrentThread());
-
+		
 		conditionLock.release();
-		KThread.sleep();
+		
 		
 
 		conditionLock.acquire();
@@ -56,6 +58,51 @@ public class Condition2 {
 	 */
 	public void wakeAll() {
 		Lib.assertTrue(conditionLock.isHeldByCurrentThread());
+	}
+	
+	
+	// Place this function inside Condition2. And make sure Condition2.selfTest() is called inside ThreadedKernel.selfTest() method. You should get exact same behaviour with Condition empty and Condition2 empty.
+	/**
+	 * test
+	 */
+	public static void selfTest(){
+	    final Lock lock = new Lock();
+	    // final Condition empty = new Condition(lock);
+	    final Condition2 empty = new Condition2(lock);
+	    final LinkedList<Integer> list = new LinkedList<>();
+	    
+	    KThread consumer = new KThread( new Runnable () {
+	        public void run() {
+	            lock.acquire();
+	            while(list.isEmpty()){
+	                empty.sleep();
+	            }
+	            Lib.assertTrue(list.size() == 5, "List should have 5 values.");
+	            while(!list.isEmpty()) {
+	                System.out.println("Removed " + list.removeFirst());
+	            }
+	            lock.release();
+	        }
+	    });
+	    
+	    KThread producer = new KThread( new Runnable () {
+	        public void run() {
+	            lock.acquire();
+	            for (int i = 0; i < 5; i++) {
+	                list.add(i);
+	                System.out.println("Added " + i);
+	            }
+	            empty.wake();
+	            lock.release();
+	        }
+	    });
+	    
+	    consumer.setName("Consumer");
+	    producer.setName("Producer");
+	    consumer.fork();
+	    producer.fork();
+	    consumer.join();
+	    producer.join();
 	}
 
 	private Lock conditionLock;
