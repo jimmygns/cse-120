@@ -426,6 +426,14 @@ public class KThread {
 		private int which;
 	}
 	
+	public void setWaitTime(long time){
+		this.waitTime=time;
+	}
+	
+	public long getWaitTime(){
+		return this.waitTime;
+	}
+	
 	
 	
 	/**
@@ -502,4 +510,6 @@ public class KThread {
 	private static KThread idleThread = null;
 	
 	private KThread parentThread = null;
+	
+	private long waitTime = 0;
 }

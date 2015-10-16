@@ -1,5 +1,9 @@
 package nachos.threads;
 
+import java.util.Comparator;
+import java.util.LinkedList;
+import java.util.PriorityQueue;
+
 import nachos.machine.*;
 
 /**
@@ -29,7 +33,23 @@ public class Alarm {
 	 * should be run.
 	 */
 	public void timerInterrupt() {
-		KThread.currentThread().yield();
+		//KThread.currentThread().yield();
+		
+		// Check queue for condition, if true, wake it
+//		for(KThread thread:waitQueue) {
+//			if(Machine.timer().getTime()>=thread.getWaitTime()){
+//				thread.ready();
+//				waitQueue.remove(thread);
+//				
+//			}
+//			
+//		}
+		
+		
+		
+		while(!waitQueue.isEmpty()&&waitQueue.peek().getWaitTime()<=Machine.timer().getTime())
+			waitQueue.remove().ready();
+		
 	}
 
 	/**
@@ -46,8 +66,44 @@ public class Alarm {
 	 */
 	public void waitUntil(long x) {
 		// for now, cheat just to get something working (busy waiting is bad)
+		
+		// Test priorityqueue
+		boolean intStatus = Machine.interrupt().disable();
 		long wakeTime = Machine.timer().getTime() + x;
-		while (wakeTime > Machine.timer().getTime())
-			KThread.yield();
+		KThread.currentThread().setWaitTime(wakeTime);
+		waitQueue.add(KThread.currentThread());
+		KThread.sleep();
+		Machine.interrupt().restore(intStatus);
 	}
+	
+	// Place this function inside Alarm. And make sure Alarm.selfTest() is called inside ThreadedKernel.selfTest() method.
+
+	public static void selftest() {
+	    KThread t1 = new KThread(new Runnable() {
+	        public void run() {
+	            long time1 = Machine.timer().getTime();
+	            int waitTime = 10000;
+	            System.out.println("Thread calling wait at time:" + time1);
+	            ThreadedKernel.alarm.waitUntil(waitTime);
+	            System.out.println("Thread woken up after:" + (Machine.timer().getTime() - time1));
+	            Lib.assertTrue((Machine.timer().getTime() - time1) > waitTime, " thread woke up too early.");
+	            
+	        }
+	    });
+	    t1.setName("T1");
+	    t1.fork();
+	    t1.join();
+	}
+	
+	//private LinkedList<KThread> waitQueue = new LinkedList<KThread>();
+	private PQKWaitSort comp = new PQKWaitSort();
+	private PriorityQueue<KThread> waitQueue = new PriorityQueue<KThread>(comp);
+	
+	static class PQKWaitSort implements Comparator<KThread> {
+		 
+		public int compare(KThread one, KThread two) {
+			return (int)(two.getWaitTime() - one.getWaitTime());
+		}
+	}
+	
 }

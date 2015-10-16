@@ -126,7 +126,7 @@ public class Condition {
 		            while(list.isEmpty()){
 		                empty.sleep();
 		            }
-		            Lib.assertTrue(list.size() == 500, "List should have 5 values.");
+		            Lib.assertTrue(list.size() == 5, "List should have 5 values.");
 		            while(!list.isEmpty()) {
 		                System.out.println("Removed " + list.removeFirst());
 		            }
