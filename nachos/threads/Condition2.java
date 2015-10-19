@@ -87,7 +87,7 @@ public class Condition2 {
 	            while(list.isEmpty()){
 	                empty.sleep();
 	            }
-	            Lib.assertTrue(list.size() == 500, "List should have 5 values.");
+	            Lib.assertTrue(list.size() == 5, "List should have 5 values.");
 	            while(!list.isEmpty()) {
 	                System.out.println("Removed " + list.removeFirst());
 	            }
@@ -98,7 +98,7 @@ public class Condition2 {
 	    KThread producer = new KThread( new Runnable () {
 	        public void run() {
 	            lock.acquire();
-	            for (int i = 0; i < 500; i++) {
+	            for (int i = 0; i < 5; i++) {
 	                list.add(i);
 	                System.out.println("Added " + i);
 	            }

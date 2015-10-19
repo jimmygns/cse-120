@@ -193,7 +193,7 @@ public class KThread {
 	 */
 	public static void finish() {
 		Lib.debug(dbgThread, "Finishing thread: " + currentThread.toString());
-		boolean intStatus = Machine.interrupt().disable();
+		Machine.interrupt().disable();
 	
 		Machine.autoGrader().finishingCurrentThread();
 		if(currentThread.parentThread!=null)
@@ -205,7 +205,6 @@ public class KThread {
 		currentThread.status = statusFinished;
 		
 		sleep();
-		Machine.interrupt().restore(intStatus);
 	}
 
 	/**

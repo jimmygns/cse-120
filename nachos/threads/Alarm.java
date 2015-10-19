@@ -33,19 +33,8 @@ public class Alarm {
 	 * should be run.
 	 */
 	public void timerInterrupt() {
-		//KThread.currentThread().yield();
-		
-		// Check queue for condition, if true, wake it
-//		for(KThread thread:waitQueue) {
-//			if(Machine.timer().getTime()>=thread.getWaitTime()){
-//				thread.ready();
-//				waitQueue.remove(thread);
-//				
-//			}
-//			
-//		}
-		
-		
+		KThread.currentThread().yield();
+
 		
 		while(!waitQueue.isEmpty()&&waitQueue.peek().getWaitTime()<=Machine.timer().getTime())
 			waitQueue.remove().ready();
@@ -82,7 +71,19 @@ public class Alarm {
 	    KThread t1 = new KThread(new Runnable() {
 	        public void run() {
 	            long time1 = Machine.timer().getTime();
-	            int waitTime = 10000;
+	            int waitTime = 30000;
+	            System.out.println("Thread calling wait at time:" + time1);
+	            ThreadedKernel.alarm.waitUntil(waitTime);
+	            System.out.println("Thread woken up after:" + (Machine.timer().getTime() - time1));
+	            Lib.assertTrue((Machine.timer().getTime() - time1) > waitTime, " thread woke up too early.");
+	            
+	        }
+	    });
+	    
+	    KThread t2 = new KThread(new Runnable() {
+	        public void run() {
+	            long time1 = Machine.timer().getTime();
+	            int waitTime = 20000;
 	            System.out.println("Thread calling wait at time:" + time1);
 	            ThreadedKernel.alarm.waitUntil(waitTime);
 	            System.out.println("Thread woken up after:" + (Machine.timer().getTime() - time1));
@@ -93,6 +94,9 @@ public class Alarm {
 	    t1.setName("T1");
 	    t1.fork();
 	    t1.join();
+	    t2.setName("T2");
+	    t2.fork();
+	    t2.join();
 	}
 	
 	//private LinkedList<KThread> waitQueue = new LinkedList<KThread>();
