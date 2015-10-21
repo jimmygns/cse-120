@@ -15,15 +15,12 @@ public class Communicator {
 	/**
 	 * Allocate a new communicator.
 	 */
-	private final int CANSEND=0;
-	private final int CANRECV=1;
-	private final int CANLEAVE=-1;
+	
 	
 	private Lock lock;
 	private Condition2 canSend, canRecv, canLeave;
 	private ArrayList<Integer> buffer;
-	//0 = canSend, 1 = canRecv, -1 = canLeave
-	private int cond;
+	
 	
 	
 	public Communicator() {
@@ -32,7 +29,7 @@ public class Communicator {
 		canSend = new Condition2(lock);
 		canRecv = new Condition2(lock);
 		canLeave = new Condition2(lock);
-		//cond = CANSEND;
+		
 		
 	}
 
@@ -48,15 +45,18 @@ public class Communicator {
 	 */
 	public void speak(int word) {
 		lock.acquire();
-		//while(cond!=CANSEND)
+		
 		while(buffer.size()>0)
 			canSend.sleep();
 		
 		buffer.add(word);
-		//cond = CANRECV;
+		System.out.println("speaker speaks: "+word);
+		
 		canRecv.wake();
 		
-		//cond = CANSEND;
+		canLeave.sleep();
+		
+		
 		lock.release();
 		
 		
@@ -75,9 +75,10 @@ public class Communicator {
 		while(buffer.size()<1)
 			canRecv.sleep();
 		int w = buffer.remove(0);
+		System.out.println("listener listens: "+w);
+		canLeave.wake();
 		canSend.wake();
 		
-		//cond = CANLEAVE;
 		lock.release();
 		return w;
 		
@@ -86,6 +87,9 @@ public class Communicator {
 	// Place this function inside Communicator. And make sure Communicator.selfTest() is called inside ThreadedKernel.selfTest() method.
 
 	public static void selfTest(){
+		
+		
+		
 	    final Communicator com = new Communicator();
 	    final long times[] = new long[4];
 	    final int words[] = new int[2];
@@ -110,6 +114,8 @@ public class Communicator {
 	        }
 	    });
 	    listener1.setName("L1");
+	    
+	    
 	    KThread listener2 = new KThread( new Runnable () {
 	        public void run() {
 	            words[1] = com.listen();
@@ -123,7 +129,7 @@ public class Communicator {
 	    
 	    Lib.assertTrue(words[0] == 4, "Didn't listen back spoken word."); 
 	    Lib.assertTrue(words[1] == 7, "Didn't listen back spoken word.");
-	    Lib.assertTrue(times[0] < times[2], "speak returned before listen.");
-	    Lib.assertTrue(times[1] < times[3], "speak returned before listen.");
+	    Lib.assertTrue(times[0] > times[2], "speak returned before listen.");
+	    Lib.assertTrue(times[1] > times[3], "speak returned before listen.");
 	}
 }
