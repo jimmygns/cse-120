@@ -196,7 +196,9 @@ public class KThread {
 		Machine.interrupt().disable();
 	
 		Machine.autoGrader().finishingCurrentThread();
-		if(currentThread.parentThread!=null)
+
+		// Child thread finishes, context switch back to parent thread
+		if (currentThread.parentThread != null)
 			currentThread.parentThread.ready();
 		
 		Lib.assertTrue(toBeDestroyed == null);
@@ -281,27 +283,24 @@ public class KThread {
 	 * return immediately. This method must only be called once; the second call
 	 * is not guaranteed to return. This thread must not be the current thread.
 	 */
-	
-	//A == current thread
-	//A calls on B.join()
-	//this == B
 	public void join() {
 		boolean intStatus = Machine.interrupt().disable();
-		Lib.debug(dbgThread, "Joining to thread: " + toString());
 
+		Lib.debug(dbgThread, "Joining to thread: " + toString());
 		Lib.assertTrue(this != currentThread);
-		
-		//1. if B is finished (let's say B not finished at this point)
-		if(this.status==statusFinished)
+
+		// A == current thread
+		// A calls on B.join()
+		// this == B
+
+		// B finished
+		if (this.status == statusFinished)
 			return;
 		
-		//2. B was not finished so we got this far.  
-		//3. Context switch to B
-		//4. B finishes, context switch back to A
-		//5 executing all thie code below here even though B is finished
-		//check with tutor
+		// B did not finished (context switch to B)
 		this.parentThread = currentThread;
 		sleep();
+
 		Machine.interrupt().restore(intStatus);
 	}
 
@@ -416,8 +415,7 @@ public class KThread {
 
 		public void run() {
 			for (int i = 0; i < 5; i++) {
-				System.out.println("*** awesome thread " + which + " looped " + i
-						+ " times");
+				System.out.println("*** awesome thread " + which + " looped " + i + " times");
 				currentThread.yield();
 			}
 		}
@@ -425,16 +423,14 @@ public class KThread {
 		private int which;
 	}
 	
-	public void setWaitTime(long time){
-		this.waitTime=time;
+	public void setWaitTime(long time) {
+		this.waitTime = time;
 	}
 	
-	public long getWaitTime(){
+	public long getWaitTime() {
 		return this.waitTime;
 	}
-	
-	
-	
+
 	/**
 	 * Tests whether this module is working.
 	 */
@@ -442,18 +438,18 @@ public class KThread {
 		Lib.debug(dbgThread, "Enter KThread.selfTest");
 		
 		KThread t1 = new KThread( new Runnable () {
-	        public void run() {
-	            for (int i = 0; i < 150; i++) {
-	                System.out.println("i = " + i);
-	            }
-	        }
-	    });
-	    t1.setName("Thread 1");
-	    t1.fork();
-	    t1.join();
-	    System.out.println("Reached part of code after t1.join(). t1 should be finshed at this point.");
-	    System.out.println("t1 finished? " + (t1.status == statusFinished));
-	    Lib.assertTrue((t1.status == statusFinished), " Expected t1 to be finished.");
+			public void run() {
+				for (int i = 0; i < 150; i++) {
+					System.out.println("i = " + i);
+				}
+			}
+		});
+		t1.setName("Thread 1");
+		t1.fork();
+		t1.join();
+		System.out.println("Reached part of code after t1.join(). t1 should be finished at this point.");
+		System.out.println("t1 finished? " + (t1.status == statusFinished));
+		Lib.assertTrue((t1.status == statusFinished), " Expected t1 to be finished.");
 
 		//new KThread(new PingTest(1)).setName("forked thread").fork();
 		//new PingTest(0).run();
@@ -463,7 +459,7 @@ public class KThread {
 
 	/**
 	 * Additional state used by schedulers.
-	 * 
+	 *
 	 * @see nachos.threads.PriorityScheduler.ThreadState
 	 */
 	public Object schedulingState = null;
@@ -491,6 +487,10 @@ public class KThread {
 
 	private TCB tcb;
 
+	private KThread parentThread = null;
+
+	private long waitTime = 0;
+
 	/**
 	 * Unique identifer for this thread. Used to deterministically compare
 	 * threads.
@@ -507,8 +507,4 @@ public class KThread {
 	private static KThread toBeDestroyed = null;
 
 	private static KThread idleThread = null;
-	
-	private KThread parentThread = null;
-	
-	private long waitTime = 0;
 }
