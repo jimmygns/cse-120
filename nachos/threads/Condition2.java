@@ -91,7 +91,7 @@ public class Condition2 {
 				while (list.isEmpty())
 					empty.sleep();
 				Lib.assertTrue(list.size() == size, "List should have " + size + " values.");
-				while(!list.isEmpty())
+				while (!list.isEmpty())
 					System.out.println("Removed " + list.removeFirst());
 				lock.release();
 			}

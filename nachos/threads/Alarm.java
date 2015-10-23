@@ -1,8 +1,9 @@
 package nachos.threads;
 
 import java.util.Comparator;
-
+import java.util.LinkedList;
 import java.util.PriorityQueue;
+import java.util.Random;
 
 import nachos.machine.*;
 
@@ -71,32 +72,33 @@ public class Alarm {
 	 * method.
 	 */
 	public static void selftest() {
-		KThread t1 = new KThread(new Runnable() {
-			public void run() {
-				long time1 = Machine.timer().getTime();
-				int waitTime = 30000;
-				System.out.println("Thread calling wait at time:" + time1);
-				ThreadedKernel.alarm.waitUntil(waitTime);
-				System.out.println("Thread woken up after:" + (Machine.timer().getTime() - time1));
-				Lib.assertTrue((Machine.timer().getTime() - time1) > waitTime, " thread woke up too early.");
-			}
-		});
+		final LinkedList<KThread> threads = new LinkedList<KThread>();
+		final int size = 100;
+		final int max = 5;
+		final Random rand = new Random();
 
-		t1.setName("T1");
-		KThread t2 = new KThread(new Runnable() {
-			public void run() {
-				long time1 = Machine.timer().getTime();
-				int waitTime = 20000;
-				System.out.println("Thread calling wait at time:" + time1);
-				ThreadedKernel.alarm.waitUntil(waitTime);
-				System.out.println("Thread woken up after:" + (Machine.timer().getTime() - time1));
-				Lib.assertTrue((Machine.timer().getTime() - time1) > waitTime, " thread woke up too early.");
-			}
-		});
-		t2.setName("T2");
+		for (int i = 0; i < size; ++i) {
+			KThread thread = new KThread(new Runnable() {
+				public void run() {
+					int waitTime = 10000 * rand.nextInt(max + 1);
+					long time = Machine.timer().getTime();
+					String name = "Thread " + ++dSize;
 
-		t1.fork(); t1.join();
-		t2.fork(); t2.join();
+					System.out.println(name + " calling wait at time:" + time);
+					ThreadedKernel.alarm.waitUntil(waitTime);
+					System.out.println(name + " woken up after:" + (Machine.timer().getTime() - time));
+					Lib.assertTrue((Machine.timer().getTime() - time) > waitTime, " thread woke up too early.");
+				}
+			});
+
+			thread.setName("Thread " + dSize);
+			threads.add(thread);
+		}
+
+		for (KThread t:threads) {
+			t.fork();
+			t.join();
+		}
 	}
 
 	static class PQKWaitSort implements Comparator<KThread> {
@@ -104,6 +106,9 @@ public class Alarm {
 			return (int)(two.getWaitTime() - one.getWaitTime());
 		}
 	}
+
+	// Only used in selfTest()
+	private static int dSize = 0;
 
 	private PQKWaitSort comp = new PQKWaitSort();
 

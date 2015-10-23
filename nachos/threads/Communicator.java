@@ -1,8 +1,6 @@
 package nachos.threads;
 
-import java.util.ArrayList;
 import java.util.LinkedList;
-import java.util.Random;
 
 import nachos.machine.*;
 
@@ -18,7 +16,6 @@ public class Communicator {
 	 * Allocate a new communicator.
 	 */
 	public Communicator() {
-		buffer = new ArrayList<Integer>();
 		lock = new Lock();
 		canSend = new Condition2(lock);
 		canRecv = new Condition2(lock);
@@ -38,10 +35,10 @@ public class Communicator {
 	public void speak(int word) {
 		lock.acquire();
 		
-		while (buffer.size() > 0)
+		while (buffer != null)
 			canSend.sleep();
 		
-		buffer.add(word);
+		buffer = new Integer(word);
 
 		canRecv.wake();
 		canLeave.sleep();
@@ -58,10 +55,12 @@ public class Communicator {
 	public int listen() {
 		lock.acquire();
 
-		while(buffer.size()<1)
+		while (buffer == null)
 			canRecv.sleep();
 
-		int w = buffer.remove(0);
+		int w = buffer.intValue();
+		buffer = null;
+
 		canLeave.wake();
 		canSend.wake();
 		
@@ -69,20 +68,22 @@ public class Communicator {
 
 		return w;
 	}
-	
-	// Place this function inside Communicator. And make sure Communicator.selfTest() is called inside ThreadedKernel.selfTest() method.
+
+	/**
+	 * Place this function inside Communicator. And make sure Communicator.selfTest() is called inside
+	 * ThreadedKernel.selfTest() method.
+	 */
 	public static void selfTest() {
 	    final Communicator com = new Communicator();
-		final Lock lock = new Lock();
 		final LinkedList<KThread> speakers  = new LinkedList<KThread>();
 		final LinkedList<KThread> listeners = new LinkedList<KThread>();
-		final LinkedList<Integer> sWords = new LinkedList<Integer>();
-		final int size = 100;
+		final LinkedList<Integer> spokenWords = new LinkedList<Integer>();
+		final int size = 10;
 
 		for(int i = 0; i < size; ++i) {
 			speakers.add(new KThread(new Runnable() {
 				public void run() {
-					com.speak(dInt++);
+					com.speak(dSize++);
 				}
 			}));
 
@@ -90,7 +91,7 @@ public class Communicator {
 				public void run() {
 					int val = com.listen();
 					System.out.println(val);
-					sWords.add(val);
+					spokenWords.add(val);
 				}
 			}));
 		}
@@ -105,7 +106,7 @@ public class Communicator {
 			t.join();
 
 		for(int i = 0; i < size; ++i) {
-			int word = sWords.poll().intValue();
+			int word = spokenWords.poll().intValue();
 			Lib.assertTrue(i == word, "Words were not spoken correctly i: " + i + " sWords(i): " + word);
 		}
 
@@ -150,15 +151,11 @@ public class Communicator {
 	}
 
 	// Only used in selfTest()
-	private static int dInt = 0;
-
-	//private int buffer;
-
-	//private boolean isFull;
+	private static int dSize = 0;
 
 	private Lock lock;
 
 	private Condition2 canSend, canRecv, canLeave;
 
-	private ArrayList<Integer> buffer;
+	private Integer buffer;
 }
