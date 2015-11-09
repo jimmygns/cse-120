@@ -5,6 +5,7 @@ import nachos.threads.*;
 import nachos.userprog.*;
 
 import java.io.EOFException;
+import java.util.ArrayList;
 
 /**
  * Encapsulates the state of a user process that is not contained in its user
@@ -27,6 +28,13 @@ public class UserProcess {
 		pageTable = new TranslationEntry[numPhysPages];
 		for (int i = 0; i < numPhysPages; i++)
 			pageTable[i] = new TranslationEntry(i, i, true, false, false, false);
+		
+		// Our code here
+		// Set 0 and 1 of table to files
+		fileDescriptorTable = new OpenFile[16];
+		fileDescriptorTable[0] = UserKernel.console.openForReading();
+		fileDescriptorTable[1] = UserKernel.console.openForWriting();
+		
 	}
 
 	/**
@@ -343,6 +351,10 @@ public class UserProcess {
 		return 0;
 	}
 
+	/** Our work for project 2 goes here **/
+	
+	
+	
 	private static final int syscallHalt = 0, syscallExit = 1, syscallExec = 2,
 			syscallJoin = 3, syscallCreate = 4, syscallOpen = 5,
 			syscallRead = 6, syscallWrite = 7, syscallClose = 8,
@@ -413,12 +425,145 @@ public class UserProcess {
 		switch (syscall) {
 		case syscallHalt:
 			return handleHalt();
+		case syscallCreate:
+			return handleCreat(a0);
+		case syscallOpen:
+			return handleOpen(a0);
+		case syscallRead:
+			return handleRead(a0, a1, a2);
+		case syscallWrite:
+			return handleWrite(a0, a1, a2);
+		case syscallClose:
+			return handleClose(a0);
+		case syscallUnlink:
+			return handleUnlink(a0);
 
 		default:
 			Lib.debug(dbgProcess, "Unknown syscall " + syscall);
 			Lib.assertNotReached("Unknown system call!");
 		}
 		return 0;
+	}
+
+//	private static final int syscallHalt = 0, syscallExit = 1, syscallExec = 2,
+//			syscallJoin = 3, syscallCreate = 4, syscallOpen = 5,
+//			syscallRead = 6, syscallWrite = 7, syscallClose = 8,
+//			syscallUnlink = 9;
+	
+	
+	
+	private int handleUnlink(int fileNameAddress) {
+		
+		// TODO
+		String fileName = readVirtualMemoryString(fileNameAddress, 256);
+		if(fileName == null)
+			return -1;
+		
+		// If no other processes use this file, delete it
+		
+		// This loop looks for the file being open in this process
+		for(int descriptor = 0;descriptor<fileDescriptorTable.length;descriptor++) {
+			if(fileName == fileDescriptorTable[descriptor].getName()) {
+				
+			}
+		}
+		return 0;
+	}
+
+	private int handleClose(int fileDescriptor) {
+		// Check for errors in input
+		if(fileDescriptor < 0 || fileDescriptor > fileDescriptorTable.length-1) {
+			return -1;
+		}
+		if(fileDescriptorTable[fileDescriptor]==null) {
+			return -1;
+		}
+		
+		fileDescriptorTable[fileDescriptor].close();
+		fileDescriptorTable[fileDescriptor] = null;
+		return 0;
+	}
+
+	private int handleWrite(int descriptor, int bufferAddress, int count) {
+		if(descriptor < 0 || descriptor > fileDescriptorTable.length-1) {
+			return -1;
+		}
+		if(fileDescriptorTable[descriptor]==null) {
+			return -1;
+		}
+		byte[] data = new byte[count];
+		int bytesTransferred = writeVirtualMemory(bufferAddress, data);
+		//readVirtualMemory((int vaddr, byte[] data, int offset, int length)
+		if( bytesTransferred <= 0)
+			return -1;
+		else
+			return bytesTransferred;
+	}
+
+	private int handleRead(int descriptor, int bufferAddress, int count) {
+		if(descriptor < 0 || descriptor > fileDescriptorTable.length-1) {
+			return -1;
+		}
+		if(fileDescriptorTable[descriptor]==null) {
+			return -1;
+		}
+		byte[] data = new byte[count];
+		int bytesRead = readVirtualMemory(bufferAddress, data);
+		//readVirtualMemory((int vaddr, byte[] data, int offset, int length)
+		if( bytesRead <= 0)
+			return -1;
+		else
+			return bytesRead;
+	}
+
+	private int handleOpen(int nameAddress) {
+		// TODO Check for reading out of bounds memory
+		
+		
+		String fileName = readVirtualMemoryString(nameAddress,256);     // Read name from virtual mem
+		
+		if (fileName == null)
+			return -1;
+		OpenFile f = ThreadedKernel.fileSystem.open(fileName, false);
+		
+		if(f == null) {
+			return -1;
+		}
+		
+		for(int descriptor=0;descriptor<fileDescriptorTable.length;descriptor++) {
+			if(fileDescriptorTable[descriptor]==null) {
+				fileDescriptorTable[descriptor] = f;
+				return descriptor;
+			}
+		}		
+		
+		return -1;     // No null entry found, return failure
+		
+	}
+
+	private int handleCreat(int nameAddress) {
+		// TODO Check for reading out of bounds memory
+		
+		
+		String fileName = readVirtualMemoryString(nameAddress,256);     // Read name from virtual mem
+		
+		if (fileName == null)
+			return -1;
+		OpenFile f = ThreadedKernel.fileSystem.open(fileName, true);
+		
+		if(f == null) {
+			return -1;
+		}
+		
+		for(int descriptor=0;descriptor<fileDescriptorTable.length;descriptor++) {
+			if(fileDescriptorTable[descriptor]==null) {
+				fileDescriptorTable[descriptor] = f;
+				return descriptor;
+			}
+		}		
+		
+		return -1;     // No null entry found, return failure
+		
 	}
 
 	/**
@@ -465,6 +610,8 @@ public class UserProcess {
 
 	private int argc, argv;
 
+	private OpenFile[] fileDescriptorTable;
+	
 	private static final int pageSize = Processor.pageSize;
 
 	private static final char dbgProcess = 'a';

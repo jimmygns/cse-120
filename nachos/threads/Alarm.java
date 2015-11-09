@@ -34,6 +34,7 @@ public class Alarm {
 	 * should be run.
 	 */
 	public void timerInterrupt() {
+		// Remove interrupt disabling later if not needed
 		boolean intStatus = Machine.interrupt().disable();
 
 		while(!waitQueue.isEmpty() && waitQueue.peek().getWaitTime() <= Machine.timer().getTime())
