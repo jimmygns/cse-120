@@ -31,10 +31,9 @@ public class UserProcess {
 		
 		// Our code here
 		// Set 0 and 1 of table to files
-		fileDescriptorTable = new OpenFile[16];
+		fileDescriptorTable = new OpenFile[fileDescriptorTableMaxLength];
 		fileDescriptorTable[0] = UserKernel.console.openForReading();
 		fileDescriptorTable[1] = UserKernel.console.openForWriting();
-		
 	}
 
 	/**
@@ -341,24 +340,173 @@ public class UserProcess {
 	}
 
 	/**
-	 * Handle the halt() system call.
+	 * handle the halt() system call.
 	 */
 	private int handleHalt() {
-
 		Machine.halt();
 
 		Lib.assertNotReached("Machine.halt() did not halt machine!");
 		return 0;
 	}
 
-	/** Our work for project 2 goes here **/
-	
-	
-	
-	private static final int syscallHalt = 0, syscallExit = 1, syscallExec = 2,
-			syscallJoin = 3, syscallCreate = 4, syscallOpen = 5,
-			syscallRead = 6, syscallWrite = 7, syscallClose = 8,
-			syscallUnlink = 9;
+	/**
+	 * handle the creat() system call.
+	 */
+	private int handleCreat(int nameAddress) {
+		// TODO Check for reading out of bounds memory
+		// Read name from virtual memory
+		String filename = readVirtualMemoryString(nameAddress, filenameMaxLength);
+
+		if (filename == null)
+			return -1;
+
+		OpenFile file = ThreadedKernel.fileSystem.open(filename, true);
+
+		if (file == null) {
+			return -1;
+		}
+
+		for(int i = 0; i < fileDescriptorTable.length; ++i) {
+			if (fileDescriptorTable[i] == null) {
+				fileDescriptorTable[i] = file;
+				return i;
+			}
+		}
+
+		// No null entry found, return failure
+		return -1;
+	}
+
+	/**
+	 * handle the open() system call.
+	 */
+	private int handleOpen(int nameAddress) {
+		// TODO Check for reading out of bounds memory
+		// Read name from virtual memory
+		String filename = readVirtualMemoryString(nameAddress, filenameMaxLength);
+
+		if (filename == null) {
+			return -1;
+		}
+
+		OpenFile file = ThreadedKernel.fileSystem.open(filename, false);
+
+		if (file == null) {
+			return -1;
+		}
+
+		for(int i = 0; i < fileDescriptorTable.length; ++i) {
+			if (fileDescriptorTable[i] == null) {
+				fileDescriptorTable[i] = file;
+				return i;
+			}
+		}
+
+		// No null entry found, return failure
+		return -1;
+	}
+
+	/**
+	 * handle the read() system call.
+	 */
+	private int handleRead(int descriptor, int bufferAddress, int count) {
+		// Check if valid file descriptor
+		if (descriptor < 0 || descriptor > fileDescriptorTable.length - 1) {
+			return -1;
+		}
+
+		// Check if entry in table is valid
+		if (fileDescriptorTable[descriptor] == null) {
+			return -1;
+		}
+
+		// Read data into the array from the file descriptor
+		byte[] data = new byte[count];
+		int bytesRead = fileDescriptorTable[descriptor].read(data, 0, count);
+
+		// Check if bytes were actually read
+		if (bytesRead <= 0) {
+			return -1;
+		}
+
+		// Write data into the buffer
+		bytesRead = writeVirtualMemory(bufferAddress, data);
+
+		return (bytesRead <= 0) ? -1 : bytesRead;
+	}
+
+	/**
+	 * handle the write() system call.
+	 */
+	private int handleWrite(int descriptor, int bufferAddress, int count) {
+		// Check if valid file descriptor
+		if (descriptor < 0 || descriptor > fileDescriptorTable.length - 1) {
+			return -1;
+		}
+
+		// Check if entry in table is valid
+		if (fileDescriptorTable[descriptor] == null) {
+			return -1;
+		}
+
+		// Read data into the array from the buffer
+		byte[] data = new byte[count];
+		int bytesTransferred = readVirtualMemory(bufferAddress, data);
+
+		// Check if bytes were actually read
+		if (bytesTransferred <= 0) {
+			return -1;
+		}
+
+		// Write the data into the file
+		bytesTransferred = fileDescriptorTable[descriptor].write(data, 0, bytesTransferred);
+
+		return (bytesTransferred <= 0) ? -1 : bytesTransferred;
+	}
+
+	/**
+	 * handle the close() system call.
+	 */
+	private int handleClose(int descriptor) {
+		// Check if valid file descriptor
+		if (descriptor < 0 || descriptor > fileDescriptorTable.length - 1) {
+			return -1;
+		}
+		// Check if entry in table is valid
+		if (fileDescriptorTable[descriptor] == null) {
+			return -1;
+		}
+
+		fileDescriptorTable[descriptor].close();
+		fileDescriptorTable[descriptor] = null;
+
+		return 0;
+	}
+	/**
+	 * handle the unlink() system call.
+	 */
+	private int handleUnlink(int nameAddress) {
+		// TODO
+		// Read name from virtual memory
+		String filename = readVirtualMemoryString(nameAddress, filenameMaxLength);
+
+		if (filename == null) {
+			return -1;
+		}
+
+		// If no other processes use this file, delete it
+
+		// This loop looks for the file being open in this process
+		for (int i = 0; i < fileDescriptorTable.length; ++i) {
+			if (filename == fileDescriptorTable[i].getName()) {
+				// TODO does it error out? Do we posepone deletion?
+				return -1;
+			}
+		}
+
+		// TODO This is probably wrong
+		return (ThreadedKernel.fileSystem.remove(filename)) ? 0 : -1;
+	}
 
 	/**
 	 * Handle a syscall exception. Called by <tt>handleException()</tt>. The
@@ -445,127 +593,6 @@ public class UserProcess {
 		return 0;
 	}
 
-//	private static final int syscallHalt = 0, syscallExit = 1, syscallExec = 2,
-//			syscallJoin = 3, syscallCreate = 4, syscallOpen = 5,
-//			syscallRead = 6, syscallWrite = 7, syscallClose = 8,
-//			syscallUnlink = 9;
-	
-	
-	
-	private int handleUnlink(int fileNameAddress) {
-		
-		// TODO
-		String fileName = readVirtualMemoryString(fileNameAddress, 256);
-		if(fileName == null)
-			return -1;
-		
-		// If no other processes use this file, delete it
-		
-		// This loop looks for the file being open in this process
-		for(int descriptor = 0;descriptor<fileDescriptorTable.length;descriptor++) {
-			if(fileName == fileDescriptorTable[descriptor].getName()) {
-				
-			}
-		}
-		return 0;
-	}
-
-	private int handleClose(int fileDescriptor) {
-		// Check for errors in input
-		if(fileDescriptor < 0 || fileDescriptor > fileDescriptorTable.length-1) {
-			return -1;
-		}
-		if(fileDescriptorTable[fileDescriptor]==null) {
-			return -1;
-		}
-		
-		fileDescriptorTable[fileDescriptor].close();
-		fileDescriptorTable[fileDescriptor] = null;
-		return 0;
-	}
-
-	private int handleWrite(int descriptor, int bufferAddress, int count) {
-		if(descriptor < 0 || descriptor > fileDescriptorTable.length-1) {
-			return -1;
-		}
-		if(fileDescriptorTable[descriptor]==null) {
-			return -1;
-		}
-		byte[] data = new byte[count];
-		int bytesTransferred = writeVirtualMemory(bufferAddress, data);
-		//readVirtualMemory((int vaddr, byte[] data, int offset, int length)
-		if( bytesTransferred <= 0)
-			return -1;
-		else
-			return bytesTransferred;
-	}
-
-	private int handleRead(int descriptor, int bufferAddress, int count) {
-		if(descriptor < 0 || descriptor > fileDescriptorTable.length-1) {
-			return -1;
-		}
-		if(fileDescriptorTable[descriptor]==null) {
-			return -1;
-		}
-		byte[] data = new byte[count];
-		int bytesRead = readVirtualMemory(bufferAddress, data);
-		//readVirtualMemory((int vaddr, byte[] data, int offset, int length)
-		if( bytesRead <= 0)
-			return -1;
-		else
-			return bytesRead;
-	}
-
-	private int handleOpen(int nameAddress) {
-		// TODO Check for reading out of bounds memory
-		
-		
-		String fileName = readVirtualMemoryString(nameAddress,256);     // Read name from virtual mem
-		
-		if (fileName == null)
-			return -1;
-		OpenFile f = ThreadedKernel.fileSystem.open(fileName, false);
-		
-		if(f == null) {
-			return -1;
-		}
-		
-		for(int descriptor=0;descriptor<fileDescriptorTable.length;descriptor++) {
-			if(fileDescriptorTable[descriptor]==null) {
-				fileDescriptorTable[descriptor] = f;
-				return descriptor;
-			}
-		}		
-		
-		return -1;     // No null entry found, return failure
-		
-	}
-
-	private int handleCreat(int nameAddress) {
-		// TODO Check for reading out of bounds memory
-		
-		
-		String fileName = readVirtualMemoryString(nameAddress,256);     // Read name from virtual mem
-		
-		if (fileName == null)
-			return -1;
-		OpenFile f = ThreadedKernel.fileSystem.open(fileName, true);
-		
-		if(f == null) {
-			return -1;
-		}
-		
-		for(int descriptor=0;descriptor<fileDescriptorTable.length;descriptor++) {
-			if(fileDescriptorTable[descriptor]==null) {
-				fileDescriptorTable[descriptor] = f;
-				return descriptor;
-			}
-		}		
-		
-		return -1;     // No null entry found, return failure
-		
-	}
-
 	/**
 	 * Handle a user exception. Called by <tt>UserKernel.exceptionHandler()</tt>
 	 * . The <i>cause</i> argument identifies which exception occurred; see the
@@ -594,6 +621,14 @@ public class UserProcess {
 		}
 	}
 
+	private static final int filenameMaxLength = 256;
+	private static final int fileDescriptorTableMaxLength = 16;
+
+	private static final int syscallHalt = 0, syscallExit = 1, syscallExec = 2,
+			syscallJoin = 3, syscallCreate = 4, syscallOpen = 5,
+			syscallRead = 6, syscallWrite = 7, syscallClose = 8,
+			syscallUnlink = 9;
+
 	/** The program being run by this process. */
 	protected Coff coff;
 
@@ -611,7 +646,7 @@ public class UserProcess {
 	private int argc, argv;
 
 	private OpenFile[] fileDescriptorTable;
-	
+
 	private static final int pageSize = Processor.pageSize;
 
 	private static final char dbgProcess = 'a';
