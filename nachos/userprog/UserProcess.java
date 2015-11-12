@@ -353,7 +353,7 @@ public class UserProcess {
 	 * handle the creat() system call.
 	 */
 	private int handleCreat(int nameAddress) {
-		// TODO Check for reading out of bounds memory
+		
 		// Read name from virtual memory
 		String filename = readVirtualMemoryString(nameAddress, filenameMaxLength);
 
@@ -381,7 +381,7 @@ public class UserProcess {
 	 * handle the open() system call.
 	 */
 	private int handleOpen(int nameAddress) {
-		// TODO Check for reading out of bounds memory
+		
 		// Read name from virtual memory
 		String filename = readVirtualMemoryString(nameAddress, filenameMaxLength);
 
@@ -408,10 +408,11 @@ public class UserProcess {
 
 	/**
 	 * handle the read() system call.
+	 * //TODO while loop when count is bigger than the buffer size
 	 */
 	private int handleRead(int descriptor, int bufferAddress, int count) {
 		// Check if valid file descriptor
-		if (descriptor < 0 || descriptor > fileDescriptorTable.length - 1) {
+		if (descriptor < 0 || descriptor > fileDescriptorTable.length - 1||count<0) {
 			return -1;
 		}
 
@@ -421,18 +422,27 @@ public class UserProcess {
 		}
 
 		// Read data into the array from the file descriptor
-		byte[] data = new byte[count];
-		int bytesRead = fileDescriptorTable[descriptor].read(data, 0, count);
+		
+		byte[] data = new byte[pageSize];
+		int dataRead = readVirtualMemory(bufferAddress,data);
+		if(dataRead <=0)
+			return -1;
+		
+		
+		OpenFile f = fileDescriptorTable[descriptor];
+		int bytesRead = f.read(data, f.tell(), count);   		//tell returns the current file pointer which is the offset
 
 		// Check if bytes were actually read
-		if (bytesRead <= 0) {
+		// method read return -1 on failure
+		if (bytesRead == -1) {
 			return -1;
 		}
 
 		// Write data into the buffer
-		bytesRead = writeVirtualMemory(bufferAddress, data);
+		
+		int bytesWritten = writeVirtualMemory(bufferAddress, data);
 
-		return (bytesRead <= 0) ? -1 : bytesRead;
+		return (bytesWritten <= 0) ? -1 : bytesWritten;
 	}
 
 	/**
@@ -450,16 +460,17 @@ public class UserProcess {
 		}
 
 		// Read data into the array from the buffer
-		byte[] data = new byte[count];
+		byte[] data = new byte[pageSize];
+		
 		int bytesTransferred = readVirtualMemory(bufferAddress, data);
 
 		// Check if bytes were actually read
 		if (bytesTransferred <= 0) {
 			return -1;
 		}
-
+		OpenFile f = fileDescriptorTable[descriptor];
 		// Write the data into the file
-		bytesTransferred = fileDescriptorTable[descriptor].write(data, 0, bytesTransferred);
+		bytesTransferred = f.write(data, f.tell(), bytesTransferred);
 
 		return (bytesTransferred <= 0) ? -1 : bytesTransferred;
 	}
@@ -585,6 +596,8 @@ public class UserProcess {
 			return handleClose(a0);
 		case syscallUnlink:
 			return handleUnlink(a0);
+//		case syscallExit:
+//			return handleHalt();
 
 		default:
 			Lib.debug(dbgProcess, "Unknown syscall " + syscall);
