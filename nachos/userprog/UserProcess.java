@@ -6,6 +6,7 @@ import nachos.userprog.*;
 
 import java.io.EOFException;
 import java.util.ArrayList;
+import java.util.LinkedList;
 
 /**
  * Encapsulates the state of a user process that is not contained in its user
@@ -412,22 +413,19 @@ public class UserProcess {
 	 */
 	private int handleRead(int descriptor, int bufferAddress, int count) {
 		// Check if valid file descriptor
-		if (descriptor < 0 || descriptor > fileDescriptorTable.length - 1||count<0) {
+		if (descriptor < 0 || descriptor > fileDescriptorTable.length - 1 || count<0) {
 			return -1;
 		}
 
+		// TODO check if the page size + offset goes out of bounds of memory
+		
 		// Check if entry in table is valid
 		if (fileDescriptorTable[descriptor] == null) {
 			return -1;
 		}
 
 		// Read data into the array from the file descriptor
-		
-		byte[] data = new byte[pageSize];
-		int dataRead = readVirtualMemory(bufferAddress,data);
-		if(dataRead <=0)
-			return -1;
-		
+		byte[] data = new byte[pageSize];	         // TODO check buffer size
 		
 		OpenFile f = fileDescriptorTable[descriptor];
 		int bytesRead = f.read(data, f.tell(), count);   		//tell returns the current file pointer which is the offset
@@ -453,6 +451,8 @@ public class UserProcess {
 		if (descriptor < 0 || descriptor > fileDescriptorTable.length - 1) {
 			return -1;
 		}
+		
+		// TODO check if the page size + offset goes out of bounds of memory
 
 		// Check if entry in table is valid
 		if (fileDescriptorTable[descriptor] == null) {
@@ -460,7 +460,7 @@ public class UserProcess {
 		}
 
 		// Read data into the array from the buffer
-		byte[] data = new byte[pageSize];
+		byte[] data = new byte[pageSize];       // TODO check if valid, lecture slides
 		
 		int bytesTransferred = readVirtualMemory(bufferAddress, data);
 
@@ -489,6 +489,13 @@ public class UserProcess {
 		}
 
 		fileDescriptorTable[descriptor].close();
+		
+		// Delete file if unlink() was called on it TODO, use pair class
+		if(unlinkList.contains(fileDescriptorTable[descriptor].getName())){
+			ThreadedKernel.fileSystem.remove(fileDescriptorTable[descriptor].getName());
+			unlinkList.remove(fileDescriptorTable[descriptor].getName());
+		}
+		
 		fileDescriptorTable[descriptor] = null;
 
 		return 0;
@@ -497,25 +504,23 @@ public class UserProcess {
 	 * handle the unlink() system call.
 	 */
 	private int handleUnlink(int nameAddress) {
-		// TODO
 		// Read name from virtual memory
 		String filename = readVirtualMemoryString(nameAddress, filenameMaxLength);
 
+		// Check if file exists
 		if (filename == null) {
 			return -1;
 		}
 
-		// If no other processes use this file, delete it
-
 		// This loop looks for the file being open in this process
 		for (int i = 0; i < fileDescriptorTable.length; ++i) {
 			if (filename == fileDescriptorTable[i].getName()) {
-				// TODO does it error out? Do we posepone deletion?
-				return -1;
+				// File found, mark for deletion, return success
+				unlinkList.add(filename);
+				return 0;
 			}
 		}
 
-		// TODO This is probably wrong
 		return (ThreadedKernel.fileSystem.remove(filename)) ? 0 : -1;
 	}
 
@@ -658,6 +663,11 @@ public class UserProcess {
 
 	private int argc, argv;
 
+	
+	//private Pair<OpenFile, Boolean>[] fileDescriptorTable;  TODO find out if we need this pair to check for unlink flag
+	
+	private LinkedList<String> unlinkList = new LinkedList<String>();
+	
 	private OpenFile[] fileDescriptorTable;
 
 	private static final int pageSize = Processor.pageSize;
