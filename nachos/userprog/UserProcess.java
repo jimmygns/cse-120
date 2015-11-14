@@ -25,13 +25,12 @@ public class UserProcess {
 	 * Allocate a new process.
 	 */
 	public UserProcess() {
-		// TODO why would we ever need to allocate all the pages available
-		int numPhysPages = Machine.processor().getNumPhysPages();
-		pageTable = new TranslationEntry[numPhysPages];
-		for (int i = 0; i < numPhysPages; i++)
-			pageTable[i] = new TranslationEntry(i, i, true, false, false, false);
-		
-		
+//		int numPhysPages = Machine.processor().getNumPhysPages();
+//		pageTable = new TranslationEntry[numPhysPages];
+//		for (int i = 0; i < numPhysPages; i++)
+//			pageTable[i] = new TranslationEntry(i, i, true, false, false, false);
+//		
+//		
 		// Our code here
 		// Set 0 and 1 of table to files
 		fileDescriptorTable = new OpenFile[fileDescriptorTableMaxLength];
@@ -289,16 +288,30 @@ public class UserProcess {
 	 * @return <tt>true</tt> if the sections were successfully loaded.
 	 */
 	protected boolean loadSections() {
-		if (numPages > Machine.processor().getNumPhysPages()) {
-//		if( numPages > UserKernel.freePages.size() ) {
+		
+//		UserKernel.memoryLock.acquire();
+		
+		//if (numPages > Machine.processor().getNumPhysPages()) {
+		if( numPages > UserKernel.freePages.size() ) {
 			coff.close();
 			Lib.debug(dbgProcess, "\tinsufficient physical memory");
 			return false;
 		}
 		
-		// Set page table here
-		//pageTable[i] = new TranslationEntry(i, i, true, false, false, false);
-//		pageTable = new TranslationEntry[numPages];
+		pageTable = new TranslationEntry[numPages];
+//		// Fill pageTable with invalid entries
+//		for (int i = 0; i < numPages; i++)
+//			pageTable[i] = new TranslationEntry(i,i, true, false, false, false);
+ 
+		System.out.println(UserKernel.freePages.pop());
+		System.out.println(numPages);
+		// Give the process the amount of pages it needs
+		for(int i=0;i<numPages;i++) {
+			int ppn = UserKernel.freePages.pop();
+			// Write entry into page table then give the memory
+			pageTable[i] = new TranslationEntry(i, i, true, false, false, false);
+		}
+		
 
 		// load sections TODO modify this
 		for (int s = 0; s < coff.getNumSections(); s++) {
@@ -311,18 +324,15 @@ public class UserProcess {
 				int vpn = section.getFirstVPN() + i;
 
 				// for now, just assume virtual addresses=physical addresses
+				// TODO, make sure code is correct
+//				section.loadPage(i, pageTable[vpn].ppn);
+//				pageTable[vpn].readOnly = true;            // Set this page to read only
 				section.loadPage(i, vpn);
 			}
 		}
-		
-//		// Give the process the amount of pages it needs
-//		for(int i=0;i<stackPages;i++) {
-//			// TODO I did this section
-//			// Write entry into page table then give the memory
-//			UserPage up = UserKernel.freePages.pop();
-//			pageTable[i] = new TranslationEntry(up.getVPN(), up.getPPN(), true, false, false, false);
-//		}
 
+//		UserKernel.memoryLock.release();
+		
 		return true;
 	}
 
@@ -330,6 +340,13 @@ public class UserProcess {
 	 * Release any resources allocated by <tt>loadSections()</tt>.
 	 */
 	protected void unloadSections() {
+		// TODO make atomic, also this might be wrong
+//		UserKernel.memoryLock.acquire();
+		// Release all pages stored
+//		for(TranslationEntry t:pageTable) {
+//			UserKernel.freePages.push(t.vpn);
+//		}		
+//		UserKernel.memoryLock.release();
 	}
 
 	/**
@@ -437,7 +454,7 @@ public class UserProcess {
 			return -1;
 		}
 
-		// Check if memory accessed is within page bounds
+		// Check if memory accessed is within page bounds   TODO check might be wrong, might overflow past file allocation? i dunno
 		if( count+bufferAddress > numPages*pageSize ) {
 			return -1;
 		}
@@ -478,7 +495,7 @@ public class UserProcess {
 			return -1;
 		}
 		
-		// Check if memory accessed is within page bounds
+		// Check if memory accessed is within page bounds TODO check might be wrong
 		if( count+bufferAddress > numPages*pageSize ) {
 			return -1;
 		}
@@ -489,7 +506,7 @@ public class UserProcess {
 		int bytesTransferred = readVirtualMemory(bufferAddress, data);
 
 		// Check if bytes were actually read
-		if (bytesTransferred <= 0) {
+		if (bytesTransferred < 0) {
 			return -1;
 		}
 		OpenFile f = fileDescriptorTable[descriptor];
@@ -514,13 +531,13 @@ public class UserProcess {
 
 		fileDescriptorTable[descriptor].close();
 		
-		// Delete file if unlink() was called on it TODO check with tutors
-		if(unlinkList.contains(descriptor)){
-			if(ThreadedKernel.fileSystem.remove(fileDescriptorTable[descriptor].getName())) 
-				unlinkList.remove(fileDescriptorTable[descriptor].getName());
-			else
-				return -1;            // Return failure if fileSystem delete fails
-		}
+//		// Delete file if unlink() was called on it TODO check with tutors
+//		if(unlinkList.contains(descriptor)){
+//			if(ThreadedKernel.fileSystem.remove(fileDescriptorTable[descriptor].getName())) 
+//				unlinkList.remove(fileDescriptorTable[descriptor].getName());
+//			else
+//				return -1;            // Return failure if fileSystem delete fails
+//		}
 		
 		fileDescriptorTable[descriptor] = null;
 
@@ -537,17 +554,19 @@ public class UserProcess {
 		if (filename == null) {
 			return -1;
 		}
+		
+		return (ThreadedKernel.fileSystem.remove(filename)) ? 0: -1;
 
-		// This loop looks for the file being open in this process
-		for (int i = 0; i < fileDescriptorTable.length; ++i) {
-			if (filename == fileDescriptorTable[i].getName()) {
-				// File found, mark for deletion, return success
-				unlinkList.add(i);
-				return 0;
-			}
-		}
-
-		return (ThreadedKernel.fileSystem.remove(filename)) ? 0 : -1;
+//		// This loop looks for the file being open in this process
+//		for (int i = 0; i < fileDescriptorTable.length; ++i) {
+//			if (filename == fileDescriptorTable[i].getName()) {
+//				// File found, mark for deletion, return success
+//				unlinkList.add(i);
+//				return 0;
+//			}
+//		}
+//
+//		return (ThreadedKernel.fileSystem.remove(filename)) ? 0 : -1;
 	}
 
 	/**
@@ -687,12 +706,9 @@ public class UserProcess {
 
 	private int initialPC, initialSP;
 
-	private int argc, argv;
-
-	//private Pair<OpenFile, Boolean>[] fileDescriptorTable;  TODO find out if we need this pair to check for unlink flag
+	private int argc, argv;	
 	
-	
-	private LinkedList<Integer> unlinkList = new LinkedList<Integer>();
+	//private LinkedList<Integer> unlinkList = new LinkedList<Integer>();   // TODO might not need
 	
 	private OpenFile[] fileDescriptorTable;
 	

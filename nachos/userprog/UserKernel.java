@@ -32,11 +32,9 @@ public class UserKernel extends ThreadedKernel {
 			}
 		});
 		
-		
-		// TODO I DID THIS
-		// Create virtual page addresses
-		for(int i=0;i<Machine.processor().getNumPhysPages();i++) {
-			freePages.add(new UserPage(i, i, 0)); // 0 offset because we don't know what that does
+		// Create virtual page addresses, done in reverse for error checking
+		for(int i=Machine.processor().getNumPhysPages()-1;i>=0;i--) {
+			freePages.add(i); // 0 offset because we don't know what that does
 		}
 	}
 
@@ -120,8 +118,8 @@ public class UserKernel extends ThreadedKernel {
 	/** Globally accessible reference to the synchronized console. */
 	public static SynchConsole console;
 	
-	//page table
-	public static LinkedList<UserPage> freePages = new LinkedList<UserPage>();
+	// Linked lits of all free pages in phys memory
+	public static LinkedList<Integer> freePages = new LinkedList<Integer>();
 	
 	public static int nextProcessID;
 	
