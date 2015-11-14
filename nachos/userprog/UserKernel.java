@@ -1,5 +1,7 @@
 package nachos.userprog;
 
+import java.util.LinkedList;
+
 import nachos.machine.*;
 import nachos.threads.*;
 import nachos.userprog.*;
@@ -29,6 +31,13 @@ public class UserKernel extends ThreadedKernel {
 				exceptionHandler();
 			}
 		});
+		
+		
+		// TODO I DID THIS
+		// Create virtual page addresses
+		for(int i=0;i<Machine.processor().getNumPhysPages();i++) {
+			freePages.add(new UserPage(i, i, 0)); // 0 offset because we don't know what that does
+		}
 	}
 
 	/**
@@ -110,6 +119,15 @@ public class UserKernel extends ThreadedKernel {
 
 	/** Globally accessible reference to the synchronized console. */
 	public static SynchConsole console;
+	
+	//page table
+	public static LinkedList<UserPage> freePages = new LinkedList<UserPage>();
+	
+	public static int nextProcessID;
+	
+	public static Lock processLock;
+	
+	public static Lock memoryLock;
 
 	// dummy variables to make javac smarter
 	private static Coff dummy1 = null;

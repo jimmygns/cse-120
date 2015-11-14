@@ -25,10 +25,12 @@ public class UserProcess {
 	 * Allocate a new process.
 	 */
 	public UserProcess() {
+		// TODO why would we ever need to allocate all the pages available
 		int numPhysPages = Machine.processor().getNumPhysPages();
 		pageTable = new TranslationEntry[numPhysPages];
 		for (int i = 0; i < numPhysPages; i++)
 			pageTable[i] = new TranslationEntry(i, i, true, false, false, false);
+		
 		
 		// Our code here
 		// Set 0 and 1 of table to files
@@ -288,12 +290,17 @@ public class UserProcess {
 	 */
 	protected boolean loadSections() {
 		if (numPages > Machine.processor().getNumPhysPages()) {
+//		if( numPages > UserKernel.freePages.size() ) {
 			coff.close();
 			Lib.debug(dbgProcess, "\tinsufficient physical memory");
 			return false;
 		}
+		
+		// Set page table here
+		//pageTable[i] = new TranslationEntry(i, i, true, false, false, false);
+//		pageTable = new TranslationEntry[numPages];
 
-		// load sections
+		// load sections TODO modify this
 		for (int s = 0; s < coff.getNumSections(); s++) {
 			CoffSection section = coff.getSection(s);
 
@@ -307,6 +314,14 @@ public class UserProcess {
 				section.loadPage(i, vpn);
 			}
 		}
+		
+//		// Give the process the amount of pages it needs
+//		for(int i=0;i<stackPages;i++) {
+//			// TODO I did this section
+//			// Write entry into page table then give the memory
+//			UserPage up = UserKernel.freePages.pop();
+//			pageTable[i] = new TranslationEntry(up.getVPN(), up.getPPN(), true, false, false, false);
+//		}
 
 		return true;
 	}
@@ -409,33 +424,39 @@ public class UserProcess {
 
 	/**
 	 * handle the read() system call.
-	 * //TODO while loop when count is bigger than the buffer size
+	 *
 	 */
 	private int handleRead(int descriptor, int bufferAddress, int count) {
 		// Check if valid file descriptor
 		if (descriptor < 0 || descriptor > fileDescriptorTable.length - 1 || count<0) {
 			return -1;
 		}
-
-		// TODO check if the page size + offset goes out of bounds of memory
 		
 		// Check if entry in table is valid
-		if (fileDescriptorTable[descriptor] == null) {
+		if(fileDescriptorTable[descriptor] == null) {
 			return -1;
 		}
 
+		// Check if memory accessed is within page bounds
+		if( count+bufferAddress > numPages*pageSize ) {
+			return -1;
+		}
+		
 		// Read data into the array from the file descriptor
-		byte[] data = new byte[pageSize];	         // TODO check buffer size
+		byte[] data = new byte[count];
 		
 		OpenFile f = fileDescriptorTable[descriptor];
-		int bytesRead = f.read(data, f.tell(), count);   		//tell returns the current file pointer which is the offset
+		int bytesRead = f.read(data, 0, count);   		//tell returns the current file pointer which is the offset
 
 		// Check if bytes were actually read
-		// method read return -1 on failure
-		if (bytesRead == -1) {
+		// method read return -1 or 0 on failure
+		if (bytesRead == -1 || bytesRead == 0) {
 			return -1;
 		}
 
+		
+		// TODO Check if we have too much stuff in the buffer where the 2nd line keeps repeating on no entry
+		
 		// Write data into the buffer
 		
 		int bytesWritten = writeVirtualMemory(bufferAddress, data);
@@ -451,16 +472,19 @@ public class UserProcess {
 		if (descriptor < 0 || descriptor > fileDescriptorTable.length - 1) {
 			return -1;
 		}
-		
-		// TODO check if the page size + offset goes out of bounds of memory
 
 		// Check if entry in table is valid
 		if (fileDescriptorTable[descriptor] == null) {
 			return -1;
 		}
+		
+		// Check if memory accessed is within page bounds
+		if( count+bufferAddress > numPages*pageSize ) {
+			return -1;
+		}
 
 		// Read data into the array from the buffer
-		byte[] data = new byte[pageSize];       // TODO check if valid, lecture slides
+		byte[] data = new byte[count];
 		
 		int bytesTransferred = readVirtualMemory(bufferAddress, data);
 
@@ -470,7 +494,7 @@ public class UserProcess {
 		}
 		OpenFile f = fileDescriptorTable[descriptor];
 		// Write the data into the file
-		bytesTransferred = f.write(data, f.tell(), bytesTransferred);
+		bytesTransferred = f.write(data, 0, bytesTransferred);
 
 		return (bytesTransferred <= 0) ? -1 : bytesTransferred;
 	}
@@ -490,10 +514,12 @@ public class UserProcess {
 
 		fileDescriptorTable[descriptor].close();
 		
-		// Delete file if unlink() was called on it TODO, use pair class
-		if(unlinkList.contains(fileDescriptorTable[descriptor].getName())){
-			ThreadedKernel.fileSystem.remove(fileDescriptorTable[descriptor].getName());
-			unlinkList.remove(fileDescriptorTable[descriptor].getName());
+		// Delete file if unlink() was called on it TODO check with tutors
+		if(unlinkList.contains(descriptor)){
+			if(ThreadedKernel.fileSystem.remove(fileDescriptorTable[descriptor].getName())) 
+				unlinkList.remove(fileDescriptorTable[descriptor].getName());
+			else
+				return -1;            // Return failure if fileSystem delete fails
 		}
 		
 		fileDescriptorTable[descriptor] = null;
@@ -516,7 +542,7 @@ public class UserProcess {
 		for (int i = 0; i < fileDescriptorTable.length; ++i) {
 			if (filename == fileDescriptorTable[i].getName()) {
 				// File found, mark for deletion, return success
-				unlinkList.add(filename);
+				unlinkList.add(i);
 				return 0;
 			}
 		}
@@ -663,13 +689,13 @@ public class UserProcess {
 
 	private int argc, argv;
 
-	
 	//private Pair<OpenFile, Boolean>[] fileDescriptorTable;  TODO find out if we need this pair to check for unlink flag
 	
-	private LinkedList<String> unlinkList = new LinkedList<String>();
+	
+	private LinkedList<Integer> unlinkList = new LinkedList<Integer>();
 	
 	private OpenFile[] fileDescriptorTable;
-
+	
 	private static final int pageSize = Processor.pageSize;
 
 	private static final char dbgProcess = 'a';
