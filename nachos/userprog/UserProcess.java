@@ -221,7 +221,7 @@ public class UserProcess {
 			return false;
 		}
 
-		// make sure the sections are contiguous and start at page 0
+		// Make sure the sections are contiguous and start at page 0
 		numPages = 0;
 		for (int s = 0; s < coff.getNumSections(); s++) {
 			CoffSection section = coff.getSection(s);
@@ -233,7 +233,7 @@ public class UserProcess {
 			numPages += section.getLength();
 		}
 
-		// make sure the argv array will fit in one page
+		// Make sure the argv array will fit in one page
 		byte[][] argv = new byte[args.length][];
 		int argsSize = 0;
 		for (int i = 0; i < args.length; i++) {
@@ -247,20 +247,20 @@ public class UserProcess {
 			return false;
 		}
 
-		// program counter initially points at the program entry point
+		// Program counter initially points at the program entry point
 		initialPC = coff.getEntryPoint();
 
-		// next comes the stack; stack pointer initially points to top of it
+		// Next comes the stack; stack pointer initially points to top of it
 		numPages += stackPages;
 		initialSP = numPages * pageSize;
 
-		// and finally reserve 1 page for arguments
+		// And finally reserve 1 page for arguments
 		numPages++;
 
 		if (!loadSections())
 			return false;
 
-		// store arguments in last page
+		// Store arguments in last page
 		int entryOffset = (numPages - 1) * pageSize;
 		int stringOffset = entryOffset + args.length * 4;
 
@@ -288,31 +288,32 @@ public class UserProcess {
 	 * @return <tt>true</tt> if the sections were successfully loaded.
 	 */
 	protected boolean loadSections() {
-		
 //		UserKernel.memoryLock.acquire();
 		
 		//if (numPages > Machine.processor().getNumPhysPages()) {
-		if( numPages > UserKernel.freePages.size() ) {
+		if (numPages > UserKernel.freePages.size()) {
 			coff.close();
 			Lib.debug(dbgProcess, "\tinsufficient physical memory");
 			return false;
 		}
 		
 		pageTable = new TranslationEntry[numPages];
-//		// Fill pageTable with invalid entries
+		// Fill pageTable with invalid entries
 //		for (int i = 0; i < numPages; i++)
 //			pageTable[i] = new TranslationEntry(i,i, true, false, false, false);
- 
-		System.out.println(UserKernel.freePages.pop());
-		System.out.println(numPages);
+
+		// TODO Remove debug message
+		System.out.println("UserProcess.java - loadSections: UserKernel.freePages.pop(): " + UserKernel.freePages.pop());
+		System.out.println("UserProcess.java - loadSections: numPages: " + numPages);
+
 		// Give the process the amount of pages it needs
-		for(int i=0;i<numPages;i++) {
+		for (int i = 0; i < numPages; ++i) {
 			int ppn = UserKernel.freePages.pop();
-			// Write entry into page table then give the memory
+
+			// Write entry into page table then give it memory
 			pageTable[i] = new TranslationEntry(i, i, true, false, false, false);
 		}
 		
-
 		// load sections TODO modify this
 		for (int s = 0; s < coff.getNumSections(); s++) {
 			CoffSection section = coff.getSection(s);
@@ -386,7 +387,6 @@ public class UserProcess {
 	 * handle the creat() system call.
 	 */
 	private int handleCreat(int nameAddress) {
-		
 		// Read name from virtual memory
 		String filename = readVirtualMemoryString(nameAddress, filenameMaxLength);
 
@@ -414,7 +414,6 @@ public class UserProcess {
 	 * handle the open() system call.
 	 */
 	private int handleOpen(int nameAddress) {
-		
 		// Read name from virtual memory
 		String filename = readVirtualMemoryString(nameAddress, filenameMaxLength);
 
@@ -428,7 +427,7 @@ public class UserProcess {
 			return -1;
 		}
 
-		for(int i = 0; i < fileDescriptorTable.length; ++i) {
+		for (int i = 0; i < fileDescriptorTable.length; ++i) {
 			if (fileDescriptorTable[i] == null) {
 				fileDescriptorTable[i] = file;
 				return i;
@@ -444,38 +443,34 @@ public class UserProcess {
 	 *
 	 */
 	private int handleRead(int descriptor, int bufferAddress, int count) {
-		// Check if valid file descriptor
-		if (descriptor < 0 || descriptor > fileDescriptorTable.length - 1 || count<0) {
+		// Check if valid file descriptor and count
+		if (descriptor < 0 || descriptor > fileDescriptorTable.length - 1 || count < 0) {
 			return -1;
 		}
 		
-		// Check if entry in table is valid
-		if(fileDescriptorTable[descriptor] == null) {
+		// Check if entry in file descriptor table is valid
+		if (fileDescriptorTable[descriptor] == null) {
 			return -1;
 		}
 
 		// Check if memory accessed is within page bounds   TODO check might be wrong, might overflow past file allocation? i dunno
-		if( count+bufferAddress > numPages*pageSize ) {
+		if (count + bufferAddress > numPages * pageSize) {
 			return -1;
 		}
 		
 		// Read data into the array from the file descriptor
-		byte[] data = new byte[count];
-		
 		OpenFile f = fileDescriptorTable[descriptor];
+		byte[] data = new byte[count];
 		int bytesRead = f.read(data, 0, count);   		//tell returns the current file pointer which is the offset
 
 		// Check if bytes were actually read
-		// method read return -1 or 0 on failure
-		if (bytesRead == -1 || bytesRead == 0) {
+		if (bytesRead <= 0) {
 			return -1;
 		}
 
-		
 		// TODO Check if we have too much stuff in the buffer where the 2nd line keeps repeating on no entry
-		
+
 		// Write data into the buffer
-		
 		int bytesWritten = writeVirtualMemory(bufferAddress, data);
 
 		return (bytesWritten <= 0) ? -1 : bytesWritten;
@@ -485,35 +480,35 @@ public class UserProcess {
 	 * handle the write() system call.
 	 */
 	private int handleWrite(int descriptor, int bufferAddress, int count) {
-		// Check if valid file descriptor
-		if (descriptor < 0 || descriptor > fileDescriptorTable.length - 1) {
+		// Check if valid file descriptor and count
+		if (descriptor < 0 || descriptor > fileDescriptorTable.length - 1 || count < 0) {
 			return -1;
 		}
 
-		// Check if entry in table is valid
+		// Check if entry in file descriptor table is valid
 		if (fileDescriptorTable[descriptor] == null) {
 			return -1;
 		}
 		
 		// Check if memory accessed is within page bounds TODO check might be wrong
-		if( count+bufferAddress > numPages*pageSize ) {
+		if (count + bufferAddress > numPages * pageSize) {
 			return -1;
 		}
 
 		// Read data into the array from the buffer
+		OpenFile f = fileDescriptorTable[descriptor];
 		byte[] data = new byte[count];
-		
 		int bytesTransferred = readVirtualMemory(bufferAddress, data);
 
-		// Check if bytes were actually read
-		if (bytesTransferred < 0) {
+		// Check if bytes transferred equals bytes requested
+		if (bytesTransferred != count) {
 			return -1;
 		}
-		OpenFile f = fileDescriptorTable[descriptor];
+
 		// Write the data into the file
 		bytesTransferred = f.write(data, 0, bytesTransferred);
 
-		return (bytesTransferred <= 0) ? -1 : bytesTransferred;
+		return (bytesTransferred != count) ? -1 : bytesTransferred;
 	}
 
 	/**
@@ -524,7 +519,8 @@ public class UserProcess {
 		if (descriptor < 0 || descriptor > fileDescriptorTable.length - 1) {
 			return -1;
 		}
-		// Check if entry in table is valid
+
+		// Check if entry in file descriptor table is valid
 		if (fileDescriptorTable[descriptor] == null) {
 			return -1;
 		}
@@ -685,6 +681,7 @@ public class UserProcess {
 	}
 
 	private static final int filenameMaxLength = 256;
+
 	private static final int fileDescriptorTableMaxLength = 16;
 
 	private static final int syscallHalt = 0, syscallExit = 1, syscallExec = 2,

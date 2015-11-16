@@ -33,7 +33,8 @@ public class UserKernel extends ThreadedKernel {
 		});
 		
 		// Create virtual page addresses, done in reverse for error checking
-		for(int i=Machine.processor().getNumPhysPages()-1;i>=0;i--) {
+		// TODO why is it in reverse? What does it help do?
+		for (int i = Machine.processor().getNumPhysPages() - 1; i >= 0; --i) {
 			freePages.add(i); // 0 offset because we don't know what that does
 		}
 	}
@@ -115,10 +116,10 @@ public class UserKernel extends ThreadedKernel {
 		super.terminate();
 	}
 
-	/** Globally accessible reference to the synchronized console. */
+	// Globally accessible reference to the synchronized console.
 	public static SynchConsole console;
 	
-	// Linked lits of all free pages in phys memory
+	// Linked list of all free pages in physical memory
 	public static LinkedList<Integer> freePages = new LinkedList<Integer>();
 	
 	public static int nextProcessID;
@@ -127,6 +128,6 @@ public class UserKernel extends ThreadedKernel {
 	
 	public static Lock memoryLock;
 
-	// dummy variables to make javac smarter
+	// Dummy variables to make javac smarter
 	private static Coff dummy1 = null;
 }
