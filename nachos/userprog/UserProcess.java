@@ -559,6 +559,18 @@ public class UserProcess {
 	 * handle the exec() system call.
 	 */
 	private int handleExec(int file, int argc, int argv) {
+		// Read name from virtual memory
+		String filename = readVirtualMemoryString(file, filenameMaxLength);
+
+		// Check validity of filename and argc
+		if (filename == null || argc <= 0)
+			return -1;
+
+		// Check for proper .coff extension
+		String[] tokens = filename.split("\\.(?=[^\\.]+$)");
+		if (tokens[1] != "coff") {
+			return -1;
+		}
 
 		return -999999;
 	}
@@ -673,7 +685,7 @@ public class UserProcess {
 	/**
 	 * Handle a user exception. Called by <tt>UserKernel.exceptionHandler()</tt>
 	 * . The <i>cause</i> argument identifies which exception occurred; see the
-	 * <tt>Processor.exceptionZZZ</tt> constants.
+	 * <tt>Processor.exception</tt> constants.
 	 * 
 	 * @param cause the user exception that occurred.
 	 */
@@ -707,21 +719,27 @@ public class UserProcess {
 			syscallRead = 6, syscallWrite = 7, syscallClose = 8,
 			syscallUnlink = 9;
 
-	/** The program being run by this process. */
+	// The program being run by this process
 	protected Coff coff;
 
-	/** This process's page table. */
+	// This process's page table
 	protected TranslationEntry[] pageTable;
 
-	/** The number of contiguous pages occupied by the program. */
+	// The number of contiguous pages occupied by the program
 	protected int numPages;
 
-	/** The number of pages in the program's stack. */
+	// The number of pages in the program's stack
 	protected final int stackPages = 8;
 
 	private int initialPC, initialSP;
 
-	private int argc, argv;	
+	private int argc, argv;
+
+	private int pid;
+
+	private int childProcess;
+
+	private Thread thread;
 	
 	//private LinkedList<Integer> unlinkList = new LinkedList<Integer>();   // TODO might not need
 	
