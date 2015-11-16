@@ -25,6 +25,8 @@ public class UserKernel extends ThreadedKernel {
 		super.initialize(args);
 
 		console = new SynchConsole(Machine.console());
+		memoryLock = new Lock();
+		processLock = new Lock();
 
 		Machine.processor().setExceptionHandler(new Runnable() {
 			public void run() {
