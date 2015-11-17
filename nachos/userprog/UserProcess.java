@@ -137,24 +137,41 @@ public class UserProcess {
 		byte[] memory = Machine.processor().getMemory();
 		int vpn = Processor.pageFromAddress(vaddr);
 		int off = Processor.offsetFromAddress(vaddr);
-		int ppn = pageTable[vpn].ppn;
-		int totalTransferred = 0;
-		
-		
+		int ppn = 0;
+
+		// Check if vpn exists in the page table
+		try {
+			ppn = pageTable[vpn].ppn;
+		} catch (IndexOutOfBoundsException e) {
+			return 0;
+		}
+
 		// Copy the array from the physical page to data
 		// TODO Check this
 		int transfer = Math.min(length, pageSize - off);
-		totalTransferred+=transfer;
+		int totalTransferred = transfer;
 		int remainingLength = length - totalTransferred;
+
 		System.arraycopy(memory, ppn * pageSize + off, data, offset, transfer);
-		off=0;
-		while(remainingLength>0){
-			vpn = Processor.pageFromAddress(vaddr+totalTransferred);
-			ppn = pageTable[vpn].ppn;
+
+		// Copy the remaining pages (if any)
+		while (remainingLength > 0) {
+			vpn = Processor.pageFromAddress(vaddr + totalTransferred);
+
+			// Check if vpn exists in the page table (may run out of pages)
+			// TODO Check this
+			try {
+				ppn = pageTable[vpn].ppn;
+			} catch (IndexOutOfBoundsException e) {
+				return totalTransferred;
+			}
+
 			transfer = Math.min(remainingLength, pageSize);
-			System.arraycopy(memory, ppn * pageSize, data, offset+totalTransferred, transfer);
-			totalTransferred+=transfer;
-			remainingLength-=transfer;
+
+			System.arraycopy(memory, ppn * pageSize, data, offset + totalTransferred, transfer);
+
+			totalTransferred += transfer;
+			remainingLength -= transfer;
 		}
 
 		return totalTransferred;
@@ -196,25 +213,41 @@ public class UserProcess {
 		byte[] memory = Machine.processor().getMemory();
 		int vpn = Processor.pageFromAddress(vaddr);
 		int off = Processor.offsetFromAddress(vaddr);
-		int ppn = pageTable[vpn].ppn;
-		
-		int totalTransferred = 0;
-		
-		
+		int ppn = 0;
+
+		// Check if vpn exists in the page table
+		try {
+			ppn = pageTable[vpn].ppn;
+		} catch (IndexOutOfBoundsException e) {
+			return 0;
+		}
+
 		// Copy the array from the physical page to data
 		// TODO Check this
 		int transfer = Math.min(length, pageSize - off);
-		totalTransferred+=transfer;
+		int totalTransferred = transfer;
 		int remainingLength = length - totalTransferred;
+
 		System.arraycopy(data, offset, memory, ppn * pageSize + off, transfer);
-		off=0;
-		while(remainingLength>0){
-			vpn = Processor.pageFromAddress(vaddr+totalTransferred);
-			ppn = pageTable[vpn].ppn;
+
+		// Copy the remaining pages (if any)
+		while (remainingLength > 0) {
+			vpn = Processor.pageFromAddress(vaddr + totalTransferred);
+
+			// Check if vpn exists in the page table (may run out of pages)
+			// TODO Check this
+			try {
+				ppn = pageTable[vpn].ppn;
+			} catch (IndexOutOfBoundsException e) {
+				return totalTransferred;
+			}
+
 			transfer = Math.min(remainingLength, pageSize);
-			System.arraycopy(data, offset+totalTransferred, memory, ppn * pageSize, transfer);
-			totalTransferred+=transfer;
-			remainingLength-=transfer;
+
+			System.arraycopy(data, offset + totalTransferred, memory, ppn * pageSize, transfer);
+
+			totalTransferred += transfer;
+			remainingLength -= transfer;
 		}
 
 		return totalTransferred;
@@ -334,7 +367,7 @@ public class UserProcess {
 
 		UserKernel.memoryLock.release();
 
-		// Load sections TODO modify this
+		// Load sections
 		for (int s = 0; s < coff.getNumSections(); ++s) {
 			CoffSection section = coff.getSection(s);
 
@@ -343,12 +376,12 @@ public class UserProcess {
 			for (int i = 0; i < section.getLength(); ++i) {
 				int vpn = section.getFirstVPN() + i;
 
-				// TODO, make sure code is correct
 				// Set this page to read-only
-				if(section.isReadOnly())
+				if (section.isReadOnly()) {
 					pageTable[vpn].readOnly = true;
+				}
+
 				section.loadPage(i, pageTable[vpn].ppn);
-				//section.loadPage(i, vpn);
 			}
 		}
 
@@ -603,16 +636,19 @@ public class UserProcess {
 		if (tokens[1] != "coff") {
 			return -1;
 		}
+
 		byte[] data = new byte[4];
 		int transferredBytes = readVirtualMemory(argv,data);
-		if(transferredBytes == -1) {
+
+		if (transferredBytes == -1) {
 			return -1;
 		}
+
 		int pointer = Lib.bytesToInt(data, 0);
 		String[] arguments = new String[argc];
-		for(int i = 0; i<argc; i++){
-			arguments[i] = readVirtualMemoryString(pointer,i*4);
-			
+
+		for (int i = 0; i < argc; ++i) {
+			arguments[i] = readVirtualMemoryString(pointer, i * 4);
 		}
 		
 		// Create new process, save necessary id's, and execute it
@@ -623,8 +659,6 @@ public class UserProcess {
 		child.execute(filename, arguments);
 		UserKernel.processMap.put(UserKernel.processCounter++, child);
 		
-		
-
 		return child.pid;
 	}
 
@@ -632,7 +666,7 @@ public class UserProcess {
 	 * handle the join() system call.
 	 */
 	private int handleJoin(int pid, int status) {
-
+		// TODO Impelement
 		return -999999;
 	}
 
@@ -643,9 +677,10 @@ public class UserProcess {
 		// TODO Terminate current process
 		
 		// Close all file descriptors
-		for(OpenFile f:fileDescriptorTable) {
+		for (OpenFile f : fileDescriptorTable) {
 			f.close();
 		}
+
 		// Free all memory
 		unloadSections();
 		
@@ -656,11 +691,10 @@ public class UserProcess {
 		UserKernel.processMap.remove(pid);
 		
 		// If last process, halt the whole machine
-		if(UserKernel.processMap.size()==0) {
+		if (UserKernel.processMap.size() == 0) {
 			Kernel.kernel.terminate();
 		}
-		
-		
+
 		// Save status to parent
 		UserKernel.processMap.get(parentProcess).joinReturnStatus = status;
 		
@@ -758,6 +792,7 @@ public class UserProcess {
 			Lib.debug(dbgProcess, "Unknown syscall " + syscall);
 			Lib.assertNotReached("Unknown system call!");
 		}
+
 		return 0;
 	}
 
@@ -793,8 +828,6 @@ public class UserProcess {
 		this.pid = pid;
 	}
 	
-	
-
 	private static final int filenameMaxLength = 256;
 
 	private static final int fileDescriptorTableMaxLength = 16;
