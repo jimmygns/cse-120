@@ -5,6 +5,7 @@ import nachos.threads.*;
 import nachos.userprog.*;
 
 import java.io.EOFException;
+import java.util.ArrayList;
 
 /**
  * Encapsulates the state of a user process that is not contained in its user
@@ -137,13 +138,26 @@ public class UserProcess {
 		int vpn = Processor.pageFromAddress(vaddr);
 		int off = Processor.offsetFromAddress(vaddr);
 		int ppn = pageTable[vpn].ppn;
-
+		int totalTransferred = 0;
+		
+		
 		// Copy the array from the physical page to data
 		// TODO Check this
-		int transfer = Math.min(length, numPages * pageSize - vaddr);
+		int transfer = Math.min(length, pageSize - off);
+		totalTransferred+=transfer;
+		int remainingLength = length - totalTransferred;
 		System.arraycopy(memory, ppn * pageSize + off, data, offset, transfer);
+		off=0;
+		while(remainingLength>0){
+			vpn = Processor.pageFromAddress(vaddr+totalTransferred);
+			ppn = pageTable[vpn].ppn;
+			transfer = Math.min(remainingLength, pageSize);
+			System.arraycopy(memory, ppn * pageSize, data, offset+totalTransferred, transfer);
+			totalTransferred+=transfer;
+			remainingLength-=transfer;
+		}
 
-		return transfer;
+		return totalTransferred;
 	}
 
 	/**
@@ -183,13 +197,27 @@ public class UserProcess {
 		int vpn = Processor.pageFromAddress(vaddr);
 		int off = Processor.offsetFromAddress(vaddr);
 		int ppn = pageTable[vpn].ppn;
-
+		
+		int totalTransferred = 0;
+		
+		
 		// Copy the array from the physical page to data
 		// TODO Check this
-		int transfer = Math.min(length, numPages * pageSize - vaddr);
+		int transfer = Math.min(length, pageSize - off);
+		totalTransferred+=transfer;
+		int remainingLength = length - totalTransferred;
 		System.arraycopy(data, offset, memory, ppn * pageSize + off, transfer);
+		off=0;
+		while(remainingLength>0){
+			vpn = Processor.pageFromAddress(vaddr+totalTransferred);
+			ppn = pageTable[vpn].ppn;
+			transfer = Math.min(remainingLength, pageSize);
+			System.arraycopy(data, offset+totalTransferred, memory, ppn * pageSize, transfer);
+			totalTransferred+=transfer;
+			remainingLength-=transfer;
+		}
 
-		return transfer;
+		return totalTransferred;
 	}
 
 	/**
@@ -317,7 +345,8 @@ public class UserProcess {
 
 				// TODO, make sure code is correct
 				// Set this page to read-only
-				pageTable[vpn].readOnly = true;
+				if(section.isReadOnly())
+					pageTable[vpn].readOnly = true;
 				section.loadPage(i, pageTable[vpn].ppn);
 				//section.loadPage(i, vpn);
 			}
@@ -330,13 +359,12 @@ public class UserProcess {
 	 * Release any resources allocated by <tt>loadSections()</tt>.
 	 */
 	protected void unloadSections() {
-		// TODO make atomic, also this might be wrong
-//		UserKernel.memoryLock.acquire();
-		// Release all pages stored
-//		for(TranslationEntry t:pageTable) {
-//			UserKernel.freePages.push(t.vpn);
-//		}		
-//		UserKernel.memoryLock.release();
+		UserKernel.memoryLock.acquire();
+  		// Release all pages stored
+		for(TranslationEntry t:pageTable) {
+			UserKernel.freePages.push(t.vpn);
+		}		
+		UserKernel.memoryLock.release();
 	}
 
 	/**
@@ -366,6 +394,10 @@ public class UserProcess {
 	 * handle the halt() system call.
 	 */
 	private int handleHalt() {
+		// Check if root process, if not, return immediately
+		if(pid != 0){
+			return 0;
+		}
 		Machine.halt();
 
 		Lib.assertNotReached("Machine.halt() did not halt machine!");
@@ -558,12 +590,12 @@ public class UserProcess {
 	/**
 	 * handle the exec() system call.
 	 */
-	private int handleExec(int file, int argc, int argv) {
+	private int handleExec(int coffName, int argc, int argv) {
 		// Read name from virtual memory
-		String filename = readVirtualMemoryString(file, filenameMaxLength);
+		String filename = readVirtualMemoryString(coffName, filenameMaxLength);
 
 		// Check validity of filename and argc
-		if (filename == null || argc <= 0)
+		if (filename == null || argc < 0)
 			return -1;
 
 		// Check for proper .coff extension
@@ -571,8 +603,29 @@ public class UserProcess {
 		if (tokens[1] != "coff") {
 			return -1;
 		}
+		byte[] data = new byte[4];
+		int transferredBytes = readVirtualMemory(argv,data);
+		if(transferredBytes == -1) {
+			return -1;
+		}
+		int pointer = Lib.bytesToInt(data, 0);
+		String[] arguments = new String[argc];
+		for(int i = 0; i<argc; i++){
+			arguments[i] = readVirtualMemoryString(pointer,i*4);
+			
+		}
+		
+		// Create new process, save necessary id's, and execute it
+		UserProcess child = UserProcess.newUserProcess();
+		child.pid=UserKernel.processCounter;
+		childProcess.add(child.pid);
+		child.parentProcess = this.pid;
+		child.execute(filename, arguments);
+		UserKernel.processMap.put(UserKernel.processCounter++, child);
+		
+		
 
-		return -999999;
+		return child.pid;
 	}
 
 	/**
@@ -587,7 +640,33 @@ public class UserProcess {
 	 * handle the exit() system call.
 	 */
 	private int handleExit(int status) {
+		// TODO Terminate current process
+		
+		// Close all file descriptors
+		for(OpenFile f:fileDescriptorTable) {
+			f.close();
+		}
+		// Free all memory
+		unloadSections();
+		
+		// TODO Remove parent process value from child procesees
 
+		
+		// Remove process from hashmap
+		UserKernel.processMap.remove(pid);
+		
+		// If last process, halt the whole machine
+		if(UserKernel.processMap.size()==0) {
+			Kernel.kernel.terminate();
+		}
+		
+		
+		// Save status to parent
+		UserKernel.processMap.get(parentProcess).joinReturnStatus = status;
+		
+		// TODO Wake up parent process
+		
+		
 		return -999999;
 	}
 
@@ -709,6 +788,12 @@ public class UserProcess {
 			Lib.assertNotReached("Unexpected exception");
 		}
 	}
+	
+	public void setPID(int pid) {
+		this.pid = pid;
+	}
+	
+	
 
 	private static final int filenameMaxLength = 256;
 
@@ -736,12 +821,14 @@ public class UserProcess {
 	private int argc, argv;
 
 	private int pid;
-
-	private int childProcess;
-
-	private Thread thread;
 	
-	//private LinkedList<Integer> unlinkList = new LinkedList<Integer>();   // TODO might not need
+	private int parentProcess;
+	
+	private int joinReturnStatus;
+	
+	private Condition waitingOnLock = new Condition(UserKernel.processLock);
+
+	private ArrayList<Integer> childProcess = new ArrayList<Integer>();
 	
 	private OpenFile[] fileDescriptorTable;
 	

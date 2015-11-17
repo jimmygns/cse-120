@@ -1,6 +1,8 @@
 package nachos.userprog;
 
+import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.Map;
 
 import nachos.machine.*;
 import nachos.threads.*;
@@ -104,7 +106,9 @@ public class UserKernel extends ThreadedKernel {
 		super.run();
 
 		UserProcess process = UserProcess.newUserProcess();
-
+		process.setPID(processCounter);
+		// Store root process in map
+		UserKernel.processMap.put(UserKernel.processCounter++, process);
 		String shellProgram = Machine.getShellProgramName();
 		Lib.assertTrue(process.execute(shellProgram, new String[] {}));
 
@@ -129,6 +133,10 @@ public class UserKernel extends ThreadedKernel {
 	public static Lock processLock;
 	
 	public static Lock memoryLock;
+	
+	public static Map<Integer,UserProcess> processMap = new HashMap<Integer, UserProcess>();
+	
+	public static int processCounter = 0;
 
 	// Dummy variables to make javac smarter
 	private static Coff dummy1 = null;
