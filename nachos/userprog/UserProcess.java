@@ -53,7 +53,10 @@ public class UserProcess {
 		if (!load(name, args))
 			return false;
 
-		new UThread(this).setName(name).fork();
+		//TODO i did this
+		processThread = new UThread(this).setName(name);
+		processThread.fork();       // Put that ish on the ready queue
+//		new UThread(this).setName(name).fork();
 
 		return true;
 	}
@@ -653,11 +656,12 @@ public class UserProcess {
 		
 		// Create new process, save necessary id's, and execute it
 		UserProcess child = UserProcess.newUserProcess();
-		child.pid=UserKernel.processCounter;
+		child.pid=(int)Math.random();  // TODO fix and use a better counter
 		childProcess.add(child.pid);
-		child.parentProcess = this.pid;
+		child.parentPID = this.pid;
 		child.execute(filename, arguments);
 		UserKernel.processMap.put(UserKernel.processCounter++, child);
+		
 		
 		return child.pid;
 	}
@@ -665,9 +669,30 @@ public class UserProcess {
 	/**
 	 * handle the join() system call.
 	 */
-	private int handleJoin(int pid, int status) {
-		// TODO Impelement
-		return -999999;
+	private int handleJoin(int pid, int statusAddress) {
+		if(!childProcess.contains(pid)) {
+			return -1;
+		}
+		
+		// Put current thread to sleep, TODO how to wake, this probably could context switch badly
+		// TODO we need to know if every process only has 1 thread
+//		while(lastWokenPID!=pid)
+//			joinLock.sleep();
+		UserKernel.processMap.get(pid).processThread.join();   // This code should handle sleeping and stuff
+		
+		// Things to do when woken up
+		childProcess.remove(new Integer(pid));  // set to remove object from childProcess list
+		
+		// 
+		int childExStatus = 0;
+		if(childExStatus != 0 )    // TODO check for correct exit status, and check for exceptions
+			return 1;
+		byte[] data = Lib.bytesFromInt(childExStatus);
+		int bytesTransferred = writeVirtualMemory(statusAddress, data); // Store exit status in memroy
+		if(bytesTransferred == -1) {
+			return -1;
+		} 
+		return 0;           // Method success, return 0
 	}
 
 	/**
@@ -675,6 +700,7 @@ public class UserProcess {
 	 */
 	private int handleExit(int status) {
 		// TODO Terminate current process
+		// Maybe pull the thread off the ready queue or block it?
 		
 		// Close all file descriptors
 		for (OpenFile f : fileDescriptorTable) {
@@ -685,6 +711,7 @@ public class UserProcess {
 		unloadSections();
 		
 		// TODO Remove parent process value from child procesees
+		parentPID = -1;
 
 		
 		// Remove process from hashmap
@@ -696,12 +723,13 @@ public class UserProcess {
 		}
 
 		// Save status to parent
-		UserKernel.processMap.get(parentProcess).joinReturnStatus = status;
+		UserKernel.processMap.get(parentPID).joinReturnStatus = status;
 		
-		// TODO Wake up parent process
+		// TODO Wake up all processes, parents still waiting on join will be put back to sleep
+		joinLock.wakeAll();
 		
 		
-		return -999999;
+		return -999999;   // TODO Wut remove?
 	}
 
 	/**
@@ -855,15 +883,17 @@ public class UserProcess {
 
 	private int pid;
 	
-	private int parentProcess;
+	private int parentPID;
 	
 	private int joinReturnStatus;
 	
-	private Condition waitingOnLock = new Condition(UserKernel.processLock);
+	private Condition joinLock = new Condition(UserKernel.processLock);
 
 	private ArrayList<Integer> childProcess = new ArrayList<Integer>();
 	
 	private OpenFile[] fileDescriptorTable;
+	
+	private KThread processThread;
 	
 	private static final int pageSize = Processor.pageSize;
 
