@@ -166,6 +166,7 @@ public class UserProcess {
 			try {
 				ppn = pageTable[vpn].ppn;
 			} catch (IndexOutOfBoundsException e) {
+//				return 0;              TODO see if we use this instead
 				return totalTransferred;
 			}
 
@@ -661,7 +662,7 @@ public class UserProcess {
 		child.parentPID = this.pid;
 		child.execute(filename, arguments);
 		UserKernel.processMap.put(UserKernel.processCounter++, child);
-		
+		System.out.println("PID: " + child.pid);
 		
 		return child.pid;
 	}
@@ -676,14 +677,14 @@ public class UserProcess {
 		
 		// Put current thread to sleep, TODO how to wake, this probably could context switch badly
 		// TODO we need to know if every process only has 1 thread
-//		while(lastWokenPID!=pid)
-//			joinLock.sleep();
+		while(UserKernel.processMap.containsKey(new Integer(pid)))
+			waitingOnChild.sleep();
 		UserKernel.processMap.get(pid).processThread.join();   // This code should handle sleeping and stuff
 		
 		// Things to do when woken up
 		childProcess.remove(new Integer(pid));  // set to remove object from childProcess list
 		
-		// 
+		// TODO get exit code
 		int childExStatus = 0;
 		if(childExStatus != 0 )    // TODO check for correct exit status, and check for exceptions
 			return 1;
@@ -700,6 +701,7 @@ public class UserProcess {
 	 */
 	private int handleExit(int status) {
 		// TODO Terminate current process
+		KThread.sleep();
 		// Maybe pull the thread off the ready queue or block it?
 		
 		// Close all file descriptors
@@ -726,7 +728,7 @@ public class UserProcess {
 		UserKernel.processMap.get(parentPID).joinReturnStatus = status;
 		
 		// TODO Wake up all processes, parents still waiting on join will be put back to sleep
-		joinLock.wakeAll();
+		waitingOnChild.wakeAll();
 		
 		
 		return -999999;   // TODO Wut remove?
@@ -887,7 +889,7 @@ public class UserProcess {
 	
 	private int joinReturnStatus;
 	
-	private Condition joinLock = new Condition(UserKernel.processLock);
+	private Condition waitingOnChild = new Condition(UserKernel.processLock);
 
 	private ArrayList<Integer> childProcess = new ArrayList<Integer>();
 	
