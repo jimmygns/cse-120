@@ -146,13 +146,13 @@ public class UserProcess {
 		int transfer = Math.min(length, pageSize - off);
 		totalTransferred+=transfer;
 		int remainingLength = length - totalTransferred;
-		System.arraycopy(memory, ppn * pageSize + off, data, offset, transfer);
+		System.arraycopy(memory, ppn*pageSize + off, data, offset, transfer);
 		off=0;
 		while(remainingLength>0){
 			vpn = Processor.pageFromAddress(vaddr+totalTransferred);
 			ppn = pageTable[vpn].ppn;
 			transfer = Math.min(remainingLength, pageSize);
-			System.arraycopy(memory, ppn * pageSize, data, offset+totalTransferred, transfer);
+			System.arraycopy(memory, ppn*pageSize , data, offset+totalTransferred, transfer);
 			totalTransferred+=transfer;
 			remainingLength-=transfer;
 		}
