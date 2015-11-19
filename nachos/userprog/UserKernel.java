@@ -104,11 +104,12 @@ public class UserKernel extends ThreadedKernel {
 	 */
 	public void run() {
 		super.run();
-
+		
 		UserProcess process = UserProcess.newUserProcess();
-		process.setPID(processCounter);
+		//process.setPID(processCounter);
 		// Store root process in map
-		UserKernel.processMap.put(UserKernel.processCounter++, process);
+		//UserKernel.processMap.put(UserKernel.processCounter, process);
+		//processCounter++;
 		String shellProgram = Machine.getShellProgramName();
 		Lib.assertTrue(process.execute(shellProgram, new String[] {}));
 

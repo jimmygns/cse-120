@@ -656,46 +656,52 @@ public class UserProcess {
 		for (int i = 0; i < argc; ++i) {
 			arguments[i] = readVirtualMemoryString(pointer, i * 4);
 		}
-		
+		UserKernel.processLock.acquire();
 		// Create new process, save necessary id's, and execute it
 		UserProcess child = UserProcess.newUserProcess();
-		child.pid=(int)Math.random();  // TODO fix and use a better counter
+		child.pid=UserKernel.processCounter;  // TODO fix and use a better counter
+		UserKernel.processCounter++;
 		childProcess.add(child.pid);
 		child.parentPID = this.pid;
 		child.execute(filename, arguments);
-		UserKernel.processMap.put(UserKernel.processCounter++, child);
-		System.out.println("PID: " + child.pid);
-		
+		UserKernel.processMap.put(child.pid, child);
+		//System.out.println("PID: " + child.pid);
+		UserKernel.processLock.release();
 		return child.pid;
 	}
 
 	/**
 	 * handle the join() system call.
 	 */
-	private int handleJoin(int pid, int statusAddress) {
+	private int handleJoin(int pid, int statusAddressPointer) {
 		if(!childProcess.contains(pid)) {
 			return -1;
 		}
 		
 		// Put current thread to sleep, TODO how to wake, this probably could context switch badly
 		// TODO we need to know if every process only has 1 thread
-		while(UserKernel.processMap.containsKey(new Integer(pid)))
-			waitingOnChild.sleep();
+//		while(UserKernel.processMap.containsKey(new Integer(pid)))
+//			waitingOnChild.sleep();
 		UserKernel.processMap.get(pid).processThread.join();   // This code should handle sleeping and stuff
 		
 		// Things to do when woken up
 		childProcess.remove(new Integer(pid));  // set to remove object from childProcess list
 		
-		// TODO get exit code
-		int childExStatus = 0;
-		if(childExStatus != 0 )    // TODO check for correct exit status, and check for exceptions
-			return 1;
-		byte[] data = Lib.bytesFromInt(childExStatus);
-		int bytesTransferred = writeVirtualMemory(statusAddress, data); // Store exit status in memroy
-		if(bytesTransferred == -1) {
-			return -1;
-		} 
-		return 0;           // Method success, return 0
+		
+		byte[] statusAddress = new byte[4];
+		int bytesTransferred = readVirtualMemory(statusAddressPointer, statusAddress); // Store exit status in memroy
+		
+		if(bytesTransferred==0) {
+			return 0;
+		}
+		
+		int childReturn = Lib.bytesToInt(statusAddress, 0);
+		byte[] byteArray = Lib.bytesFromInt(UserKernel.processMap.get(pid).exitStatus);
+		int writtenBytes = writeVirtualMemory(childReturn,byteArray);
+		if(writtenBytes==0)
+			return 0;
+		
+		return 1;           // Method success, return 1
 	}
 
 	/**
@@ -703,7 +709,7 @@ public class UserProcess {
 	 */
 	private int handleExit(int status) {
 		// TODO Terminate current process
-		KThread.sleep();
+		this.exitStatus=status;
 		// Maybe pull the thread off the ready queue or block it?
 		
 		// Close all file descriptors
@@ -716,6 +722,9 @@ public class UserProcess {
 		
 		// TODO Remove parent process value from child procesees
 		parentPID = -1;
+		for(int child : this.childProcess){
+			UserKernel.processMap.get(child).parentPID=-1;
+		}
 
 		
 		// Remove process from hashmap
@@ -733,7 +742,7 @@ public class UserProcess {
 		waitingOnChild.wakeAll();
 		
 		
-		return -999999;   // TODO Wut remove?
+		return 1;   //return 1 on normal exit
 	}
 
 	/**
@@ -837,7 +846,7 @@ public class UserProcess {
 	 */
 	public void handleException(int cause) {
 		Processor processor = Machine.processor();
-
+		exceptionReturn = true;
 		switch (cause) {
 		case Processor.exceptionSyscall:
 			int result = handleSyscall(processor.readRegister(Processor.regV0),
@@ -891,6 +900,8 @@ public class UserProcess {
 	
 	private int joinReturnStatus;
 	
+	private boolean exceptionReturn = false;  // Tracks whether process had an exception or not
+	
 	private Condition waitingOnChild = new Condition(UserKernel.processLock);
 
 	private ArrayList<Integer> childProcess = new ArrayList<Integer>();
@@ -898,6 +909,8 @@ public class UserProcess {
 	private OpenFile[] fileDescriptorTable;
 	
 	private KThread processThread;
+	
+	private int exitStatus;
 	
 	private static final int pageSize = Processor.pageSize;
 
