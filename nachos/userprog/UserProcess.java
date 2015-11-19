@@ -53,7 +53,10 @@ public class UserProcess {
 		if (!load(name, args))
 			return false;
 
-		new UThread(this).setName(name).fork();
+		//TODO i did this
+		processThread = new UThread(this).setName(name);
+		processThread.fork();       // Put that ish on the ready queue
+//		new UThread(this).setName(name).fork();
 
 		return true;
 	}
@@ -137,24 +140,44 @@ public class UserProcess {
 		byte[] memory = Machine.processor().getMemory();
 		int vpn = Processor.pageFromAddress(vaddr);
 		int off = Processor.offsetFromAddress(vaddr);
-		int ppn = pageTable[vpn].ppn;
-		int totalTransferred = 0;
-		
-		
+		int ppn = 0;
+
+		// Check if vpn exists in the page table
+		try {
+			ppn = pageTable[vpn].ppn;
+		} catch (IndexOutOfBoundsException e) {
+			return 0;
+		}
+
 		// Copy the array from the physical page to data
 		// TODO Check this
 		int transfer = Math.min(length, pageSize - off);
-		totalTransferred+=transfer;
+		int totalTransferred = transfer;
 		int remainingLength = length - totalTransferred;
-		System.arraycopy(memory, ppn*pageSize + off, data, offset, transfer);
-		off=0;
-		while(remainingLength>0){
-			vpn = Processor.pageFromAddress(vaddr+totalTransferred);
-			ppn = pageTable[vpn].ppn;
+
+
+		System.arraycopy(memory, ppn * pageSize + off, data, offset, transfer);
+
+		// Copy the remaining pages (if any)
+		while (remainingLength > 0) {
+			vpn = Processor.pageFromAddress(vaddr + totalTransferred);
+
+			// Check if vpn exists in the page table (may run out of pages)
+			// TODO Check this
+			try {
+				ppn = pageTable[vpn].ppn;
+			} catch (IndexOutOfBoundsException e) {
+//				return 0;              TODO see if we use this instead
+				return totalTransferred;
+			}
+
 			transfer = Math.min(remainingLength, pageSize);
-			System.arraycopy(memory, ppn*pageSize , data, offset+totalTransferred, transfer);
-			totalTransferred+=transfer;
-			remainingLength-=transfer;
+
+			System.arraycopy(memory, ppn * pageSize, data, offset + totalTransferred, transfer);
+
+			totalTransferred += transfer;
+			remainingLength -= transfer;
+
 		}
 
 		return totalTransferred;
@@ -196,25 +219,41 @@ public class UserProcess {
 		byte[] memory = Machine.processor().getMemory();
 		int vpn = Processor.pageFromAddress(vaddr);
 		int off = Processor.offsetFromAddress(vaddr);
-		int ppn = pageTable[vpn].ppn;
-		
-		int totalTransferred = 0;
-		
-		
+		int ppn = 0;
+
+		// Check if vpn exists in the page table
+		try {
+			ppn = pageTable[vpn].ppn;
+		} catch (IndexOutOfBoundsException e) {
+			return 0;
+		}
+
 		// Copy the array from the physical page to data
 		// TODO Check this
 		int transfer = Math.min(length, pageSize - off);
-		totalTransferred+=transfer;
+		int totalTransferred = transfer;
 		int remainingLength = length - totalTransferred;
+
 		System.arraycopy(data, offset, memory, ppn * pageSize + off, transfer);
-		off=0;
-		while(remainingLength>0){
-			vpn = Processor.pageFromAddress(vaddr+totalTransferred);
-			ppn = pageTable[vpn].ppn;
+
+		// Copy the remaining pages (if any)
+		while (remainingLength > 0) {
+			vpn = Processor.pageFromAddress(vaddr + totalTransferred);
+
+			// Check if vpn exists in the page table (may run out of pages)
+			// TODO Check this
+			try {
+				ppn = pageTable[vpn].ppn;
+			} catch (IndexOutOfBoundsException e) {
+				return totalTransferred;
+			}
+
 			transfer = Math.min(remainingLength, pageSize);
-			System.arraycopy(data, offset+totalTransferred, memory, ppn * pageSize, transfer);
-			totalTransferred+=transfer;
-			remainingLength-=transfer;
+
+			System.arraycopy(data, offset + totalTransferred, memory, ppn * pageSize, transfer);
+
+			totalTransferred += transfer;
+			remainingLength -= transfer;
 		}
 
 		return totalTransferred;
@@ -334,7 +373,7 @@ public class UserProcess {
 
 		UserKernel.memoryLock.release();
 
-		// Load sections TODO modify this
+		// Load sections
 		for (int s = 0; s < coff.getNumSections(); ++s) {
 			CoffSection section = coff.getSection(s);
 
@@ -343,12 +382,12 @@ public class UserProcess {
 			for (int i = 0; i < section.getLength(); ++i) {
 				int vpn = section.getFirstVPN() + i;
 
-				// TODO, make sure code is correct
 				// Set this page to read-only
-				if(section.isReadOnly())
+				if (section.isReadOnly()) {
 					pageTable[vpn].readOnly = true;
+				}
+
 				section.loadPage(i, pageTable[vpn].ppn);
-				//section.loadPage(i, vpn);
 			}
 		}
 
@@ -603,37 +642,60 @@ public class UserProcess {
 		if (tokens[1] != "coff") {
 			return -1;
 		}
+
 		byte[] data = new byte[4];
 		int transferredBytes = readVirtualMemory(argv,data);
-		if(transferredBytes == -1) {
+
+		if (transferredBytes == -1) {
 			return -1;
 		}
+
 		int pointer = Lib.bytesToInt(data, 0);
 		String[] arguments = new String[argc];
-		for(int i = 0; i<argc; i++){
-			arguments[i] = readVirtualMemoryString(pointer,i*4);
-			
+
+		for (int i = 0; i < argc; ++i) {
+			arguments[i] = readVirtualMemoryString(pointer, i * 4);
 		}
 		
 		// Create new process, save necessary id's, and execute it
 		UserProcess child = UserProcess.newUserProcess();
-		child.pid=UserKernel.processCounter;
+		child.pid=(int)Math.random();  // TODO fix and use a better counter
 		childProcess.add(child.pid);
-		child.parentProcess = this.pid;
+		child.parentPID = this.pid;
 		child.execute(filename, arguments);
 		UserKernel.processMap.put(UserKernel.processCounter++, child);
+		System.out.println("PID: " + child.pid);
 		
-		
-
 		return child.pid;
 	}
 
 	/**
 	 * handle the join() system call.
 	 */
-	private int handleJoin(int pid, int status) {
-
-		return -999999;
+	private int handleJoin(int pid, int statusAddress) {
+		if(!childProcess.contains(pid)) {
+			return -1;
+		}
+		
+		// Put current thread to sleep, TODO how to wake, this probably could context switch badly
+		// TODO we need to know if every process only has 1 thread
+		while(UserKernel.processMap.containsKey(new Integer(pid)))
+			waitingOnChild.sleep();
+		UserKernel.processMap.get(pid).processThread.join();   // This code should handle sleeping and stuff
+		
+		// Things to do when woken up
+		childProcess.remove(new Integer(pid));  // set to remove object from childProcess list
+		
+		// TODO get exit code
+		int childExStatus = 0;
+		if(childExStatus != 0 )    // TODO check for correct exit status, and check for exceptions
+			return 1;
+		byte[] data = Lib.bytesFromInt(childExStatus);
+		int bytesTransferred = writeVirtualMemory(statusAddress, data); // Store exit status in memroy
+		if(bytesTransferred == -1) {
+			return -1;
+		} 
+		return 0;           // Method success, return 0
 	}
 
 	/**
@@ -641,33 +703,37 @@ public class UserProcess {
 	 */
 	private int handleExit(int status) {
 		// TODO Terminate current process
+		KThread.sleep();
+		// Maybe pull the thread off the ready queue or block it?
 		
 		// Close all file descriptors
-		for(OpenFile f:fileDescriptorTable) {
+		for (OpenFile f : fileDescriptorTable) {
 			f.close();
 		}
+
 		// Free all memory
 		unloadSections();
 		
 		// TODO Remove parent process value from child procesees
+		parentPID = -1;
 
 		
 		// Remove process from hashmap
 		UserKernel.processMap.remove(pid);
 		
 		// If last process, halt the whole machine
-		if(UserKernel.processMap.size()==0) {
+		if (UserKernel.processMap.size() == 0) {
 			Kernel.kernel.terminate();
 		}
-		
-		
+
 		// Save status to parent
-		UserKernel.processMap.get(parentProcess).joinReturnStatus = status;
+		UserKernel.processMap.get(parentPID).joinReturnStatus = status;
 		
-		// TODO Wake up parent process
+		// TODO Wake up all processes, parents still waiting on join will be put back to sleep
+		waitingOnChild.wakeAll();
 		
 		
-		return -999999;
+		return -999999;   // TODO Wut remove?
 	}
 
 	/**
@@ -758,6 +824,7 @@ public class UserProcess {
 			Lib.debug(dbgProcess, "Unknown syscall " + syscall);
 			Lib.assertNotReached("Unknown system call!");
 		}
+
 		return 0;
 	}
 
@@ -793,8 +860,6 @@ public class UserProcess {
 		this.pid = pid;
 	}
 	
-	
-
 	private static final int filenameMaxLength = 256;
 
 	private static final int fileDescriptorTableMaxLength = 16;
@@ -822,15 +887,17 @@ public class UserProcess {
 
 	private int pid;
 	
-	private int parentProcess;
+	private int parentPID;
 	
 	private int joinReturnStatus;
 	
-	private Condition waitingOnLock = new Condition(UserKernel.processLock);
+	private Condition waitingOnChild = new Condition(UserKernel.processLock);
 
 	private ArrayList<Integer> childProcess = new ArrayList<Integer>();
 	
 	private OpenFile[] fileDescriptorTable;
+	
+	private KThread processThread;
 	
 	private static final int pageSize = Processor.pageSize;
 
