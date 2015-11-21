@@ -37,7 +37,6 @@ public class UserKernel extends ThreadedKernel {
 		});
 		
 		// Create virtual page addresses, done in reverse for error checking
-		// TODO why is it in reverse? What does it help do?
 		for (int i = Machine.processor().getNumPhysPages() - 1; i >= 0; --i) {
 			freePages.add(i); // 0 offset because we don't know what that does
 		}
@@ -106,10 +105,6 @@ public class UserKernel extends ThreadedKernel {
 		super.run();
 		
 		UserProcess process = UserProcess.newUserProcess();
-		//process.setPID(processCounter);
-		// Store root process in map
-		//UserKernel.processMap.put(UserKernel.processCounter, process);
-		//processCounter++;
 		String shellProgram = Machine.getShellProgramName();
 		Lib.assertTrue(process.execute(shellProgram, new String[] {}));
 
@@ -138,6 +133,8 @@ public class UserKernel extends ThreadedKernel {
 	public static Map<Integer,UserProcess> processMap = new HashMap<Integer, UserProcess>();
 	
 	public static int processCounter = 0;
+	
+	public static int numOfProcess = 0;
 
 	// Dummy variables to make javac smarter
 	private static Coff dummy1 = null;

@@ -24,7 +24,18 @@ public class UserProcess {
 	 * Allocate a new process.
 	 */
 	public UserProcess() {
-		// Set 0 and 1 of table to files
+		UserKernel.processLock.acquire();
+		
+		this.pid = UserKernel.processCounter;
+		UserKernel.processCounter++;
+		UserKernel.numOfProcess++;
+		UserKernel.processMap.put(this.pid,this);
+		
+		UserKernel.processLock.release();
+
+		parentPID = -1;
+
+		// Set 0 and 1 of table to execute files
 		fileDescriptorTable = new OpenFile[fileDescriptorTableMaxLength];
 		fileDescriptorTable[0] = UserKernel.console.openForReading();
 		fileDescriptorTable[1] = UserKernel.console.openForWriting();
@@ -53,9 +64,11 @@ public class UserProcess {
 		if (!load(name, args))
 			return false;
 
-		//TODO i did this
+		// Hold a reference to the root thread
 		processThread = new UThread(this).setName(name);
 		processThread.fork();       // Put that ish on the ready queue
+		
+		// This is the old code
 //		new UThread(this).setName(name).fork();
 
 		return true;
@@ -150,7 +163,6 @@ public class UserProcess {
 		}
 
 		// Copy the array from the physical page to data
-		// TODO Check this
 		int transfer = Math.min(length, pageSize - off);
 		int totalTransferred = transfer;
 		int remainingLength = length - totalTransferred;
@@ -163,7 +175,6 @@ public class UserProcess {
 			vpn = Processor.pageFromAddress(vaddr + totalTransferred);
 
 			// Check if vpn exists in the page table (may run out of pages)
-			// TODO Check this
 			try {
 				ppn = pageTable[vpn].ppn;
 			} catch (IndexOutOfBoundsException e) {
@@ -229,7 +240,6 @@ public class UserProcess {
 		}
 
 		// Copy the array from the physical page to data
-		// TODO Check this
 		int transfer = Math.min(length, pageSize - off);
 		int totalTransferred = transfer;
 		int remainingLength = length - totalTransferred;
@@ -241,7 +251,6 @@ public class UserProcess {
 			vpn = Processor.pageFromAddress(vaddr + totalTransferred);
 
 			// Check if vpn exists in the page table (may run out of pages)
-			// TODO Check this
 			try {
 				ppn = pageTable[vpn].ppn;
 			} catch (IndexOutOfBoundsException e) {
@@ -528,8 +537,6 @@ public class UserProcess {
 			return -1;
 		}
 
-		// TODO Check if we have too much stuff in the buffer where the 2nd line keeps repeating on no entry
-
 		// Write data into the buffer
 		int bytesWritten = writeVirtualMemory(bufferAddress, data);
 
@@ -555,7 +562,7 @@ public class UserProcess {
 			return -1;
 		}
 
-		// Read data into the array from the buffer
+		// Read data into the array from the bufferpid
 		OpenFile f = fileDescriptorTable[descriptor];
 		byte[] data = new byte[count];
 		int bytesTransferred = readVirtualMemory(bufferAddress, data);
@@ -586,15 +593,7 @@ public class UserProcess {
 		}
 
 		fileDescriptorTable[descriptor].close();
-		
-//		// Delete file if unlink() was called on it TODO check with tutors
-//		if(unlinkList.contains(descriptor)){
-//			if(ThreadedKernel.fileSystem.remove(fileDescriptorTable[descriptor].getName())) 
-//				unlinkList.remove(fileDescriptorTable[descriptor].getName());
-//			else
-//				return -1;            // Return failure if fileSystem delete fails
-//		}
-		
+
 		fileDescriptorTable[descriptor] = null;
 
 		return 0;
@@ -621,7 +620,7 @@ public class UserProcess {
 //				unlinkList.add(i);
 //				return 0;
 //			}
-//		}
+//		}pid
 //
 //		return (ThreadedKernel.fileSystem.remove(filename)) ? 0 : -1;
 	}
@@ -638,15 +637,18 @@ public class UserProcess {
 			return -1;
 
 		// Check for proper .coff extension
-		String[] tokens = filename.split("\\.(?=[^\\.]+$)");
-		if (tokens[1] != "coff") {
-			return -1;
-		}
+        int ind = filename.lastIndexOf('.');
+        if(ind==-1) {
+            return -1;
+        }
+        if(!filename.substring(ind+1,filename.length()).equals("coff")) {
+        	return -1;
+        }
 
 		byte[] data = new byte[4];
-		int transferredBytes = readVirtualMemory(argv,data);
+		int transferredBytes = readVirtualMemory(argv, data);
 
-		if (transferredBytes == -1) {
+		if (transferredBytes == 0) {
 			return -1;
 		}
 
@@ -654,19 +656,16 @@ public class UserProcess {
 		String[] arguments = new String[argc];
 
 		for (int i = 0; i < argc; ++i) {
-			arguments[i] = readVirtualMemoryString(pointer, i * 4);
+			arguments[i] = readVirtualMemoryString(pointer + i * 4, 256);
 		}
-		UserKernel.processLock.acquire();
+		
 		// Create new process, save necessary id's, and execute it
 		UserProcess child = UserProcess.newUserProcess();
-		child.pid=UserKernel.processCounter;  // TODO fix and use a better counter
-		UserKernel.processCounter++;
 		childProcess.add(child.pid);
 		child.parentPID = this.pid;
 		child.execute(filename, arguments);
-		UserKernel.processMap.put(child.pid, child);
-		//System.out.println("PID: " + child.pid);
-		UserKernel.processLock.release();
+//		UserKernel.processMap.put(child.pid, child);
+		
 		return child.pid;
 	}
 
@@ -674,73 +673,68 @@ public class UserProcess {
 	 * handle the join() system call.
 	 */
 	private int handleJoin(int pid, int statusAddressPointer) {
-		if(!childProcess.contains(pid)) {
+		if (!childProcess.contains(pid)) {
 			return -1;
 		}
-		
-		// Put current thread to sleep, TODO how to wake, this probably could context switch badly
-		// TODO we need to know if every process only has 1 thread
-//		while(UserKernel.processMap.containsKey(new Integer(pid)))
-//			waitingOnChild.sleep();
+				
+		// Put current thread to sleep
 		UserKernel.processMap.get(pid).processThread.join();   // This code should handle sleeping and stuff
-		
-		// Things to do when woken up
-		childProcess.remove(new Integer(pid));  // set to remove object from childProcess list
-		
-		
-		byte[] statusAddress = new byte[4];
-		int bytesTransferred = readVirtualMemory(statusAddressPointer, statusAddress); // Store exit status in memroy
-		
-		if(bytesTransferred==0) {
+
+		// Things to do when woken up TODO make atomic?
+		//childProcess.remove(new Integer(pid));  // set to remove object from childProcess list
+		if (UserKernel.processMap.get(pid).exceptionReturn) {
+			UserKernel.processMap.get(pid).handleExit(-1);
 			return 0;
 		}
 		
-		int childReturn = Lib.bytesToInt(statusAddress, 0);
 		byte[] byteArray = Lib.bytesFromInt(UserKernel.processMap.get(pid).exitStatus);
-		int writtenBytes = writeVirtualMemory(childReturn,byteArray);
-		if(writtenBytes==0)
-			return 0;
-		
+		int writtenBytes = writeVirtualMemory(statusAddressPointer, byteArray);
+		if (writtenBytes == 0) {
+			return 0;	
+		}
 		return 1;           // Method success, return 1
 	}
 
 	/**
 	 * handle the exit() system call.
 	 */
-	private int handleExit(int status) {
-		// TODO Terminate current process
-		this.exitStatus=status;
-		// Maybe pull the thread off the ready queue or block it?
-		
+	private int handleExit(int status) {		
+		this.exitStatus = status;
+
 		// Close all file descriptors
 		for (OpenFile f : fileDescriptorTable) {
-			f.close();
+			if(f != null) {
+				f.close();
+			}
 		}
 
 		// Free all memory
 		unloadSections();
 		
-		// TODO Remove parent process value from child procesees
-		parentPID = -1;
-		for(int child : this.childProcess){
-			UserKernel.processMap.get(child).parentPID=-1;
+		// Remove child process from parent process TODO make atomic?
+		if (parentPID != -1) {
+			// If has parent, remove child from parent list
+			UserKernel.processMap.get(parentPID).childProcess.remove(new Integer(this.pid));
 		}
-
+		
+		// Go to all child processes and change parentPID to -1 TODO make atomic?
+		for(int tpid:childProcess) {
+			UserKernel.processMap.get(tpid).parentPID = -1;
+		}
 		
 		// Remove process from hashmap
-		UserKernel.processMap.remove(pid);
+		//UserKernel.processMap.remove(pid);
+		UserKernel.processLock.acquire();
 		
 		// If last process, halt the whole machine
-		if (UserKernel.processMap.size() == 0) {
+		if (UserKernel.numOfProcess == 1) {
 			Kernel.kernel.terminate();
 		}
 
-		// Save status to parent
-		UserKernel.processMap.get(parentPID).joinReturnStatus = status;
-		
-		// TODO Wake up all processes, parents still waiting on join will be put back to sleep
-		waitingOnChild.wakeAll();
-		
+		// Save status to parent		
+		UserKernel.numOfProcess--;
+		UserKernel.processLock.release();
+		KThread.finish();
 		
 		return 1;   //return 1 on normal exit
 	}
@@ -777,7 +771,7 @@ public class UserProcess {
 	 * </tr>
 	 * <tr>
 	 * <td>5</td>
-	 * <td><tt>int  open(char *name);</tt></td>
+	 * <td><tt>int  open(char *name);</tt></td>pid
 	 * </tr>
 	 * <tr>
 	 * <td>6</td>
@@ -846,7 +840,6 @@ public class UserProcess {
 	 */
 	public void handleException(int cause) {
 		Processor processor = Machine.processor();
-		exceptionReturn = true;
 		switch (cause) {
 		case Processor.exceptionSyscall:
 			int result = handleSyscall(processor.readRegister(Processor.regV0),
@@ -859,6 +852,8 @@ public class UserProcess {
 			break;
 
 		default:
+			exceptionReturn = true;
+			handleExit(-1);
 			Lib.debug(dbgProcess, "Unexpected exception: "
 					+ Processor.exceptionNames[cause]);
 			Lib.assertNotReached("Unexpected exception");
@@ -898,11 +893,7 @@ public class UserProcess {
 	
 	private int parentPID;
 	
-	private int joinReturnStatus;
-	
 	private boolean exceptionReturn = false;  // Tracks whether process had an exception or not
-	
-	private Condition waitingOnChild = new Condition(UserKernel.processLock);
 
 	private ArrayList<Integer> childProcess = new ArrayList<Integer>();
 	
