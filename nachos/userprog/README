@@ -1,0 +1,67 @@
+CSE120 README
+Students:
+  Aaron Leong
+  Charles Cruz
+  Jinye Xu
+
+Summary:
+  Part 1: Wrote handlers for the C functions described in sys.h.
+          Handlers basically error check for issues and handle calls
+          to read and write to virtual memory. A file system was also
+          implemented by creating an array of FileOpener objects. We
+          call FileOpener methods to handle opening and closing files.
+          All the complicated sounding stuff for unlink() is handled
+          by the FileOpener class.
+  
+  Part 2: Created support for virtual page memory. Originally user process
+          mapped to physicaly memory directly. Created a static
+          list of free pages in UserKernel.java that contains integers
+          representing each available page in virtual memory (currently
+          limited to the amount of physical pages available since no
+          disk swap is implemented in this project). We then changed
+          the loadSections to support using the pageTable already included
+          in UserProcess.java. The changed method now allocates the necessary
+          free pages to the UserProcess (do not run if not enough available),
+          and assigns physical memory to the virtual memory pages.
+          In read and write to virtual memory methods, virtual addresses 
+          are converted to physical addresses now using the page table.
+          Also needed to make sure buffer read does not exceed page size here.
+          Also memoryLock was used to make sure the pages don't have a race
+          condition.
+
+  Part 3: Created support for parallel processes to run.
+          Wrote handlers for exec(), join(), and exit() syscalls. Also
+          made it so that halt could only be called on the root process.
+          Processes are kept track of using a static hashmap in UserKernel with
+          a int counter used to assign unique process id's (int overflow is not
+          checked this assignement). The PID and entry in the hashmap is set
+          in the constructor of UserProcess while using processLock to prevent
+          race conditions. The root thread of  a UserProcess created by the 
+          constructor is tracked upon instantiation with the processThread
+          method. The PID of all child processes and a PID of the parent process
+          is kept in order to access the necessary processes from the UserKernel
+          process hashmap. Join calls KThread's join() on the child process. 
+          Different things are checked here. If the child threw an exception,
+          the child should set exceptionReturn boolean val to true and call
+          handleExit(). In handleExit(), the process free's all the pages it
+          was using (using unloadSections()) and closes all OpenFiles in the
+          fileDescriptorTable. Then sets the value of it's child
+          process parentPID references to -1 and removes itself from it's
+          parent processes list of child processes.
+          (to indicate to ref to parent process). If the process is the last
+          existing process, the system halts (using Kernel.kernel.terminate()),
+          otherwise, decrements the numOfProcess and finishes the thread.
+          This finish means that if join was called on the child process, the
+          parent process can now resume. handleExceptions() was changed to 
+          call handleExit() on an unhandled exception and to set the
+          exceptionReturn flag to true. This way, the memory used can be
+          freed and the child process can terminate.
+          
+
+Work Contribution (Mostly peer programming, so work will overlap):
+-Aaron Leong: Worked on writing code for all parts of the project except for
+              the virtual address to physical address translation, but
+              did help with the page table. Helped write test cases for
+              exec() and join() for testing. Wrote the badly written readme.
+-Charles Cruz:
+-Jinye Xu:
