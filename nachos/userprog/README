@@ -59,9 +59,12 @@ Summary:
           
 
 Work Contribution (Mostly peer programming, so work will overlap):
--Aaron Leong: Worked on writing code for all parts of the project except for
-              the virtual address to physical address translation, but
-              did help with the page table. Helped write test cases for
-              exec() and join() for testing. Wrote the badly written readme.
--Charles Cruz:
+-Aaron Leong:  Worked on writing code for all parts of the project except for
+               the virtual address to physical address translation, but
+               did help with the page table. Helped write test cases for
+               exec() and join() for testing. Wrote the badly written readme.
+-Charles Cruz: Wrote the initial implementation of handleRead/handleWrite and
+               helped Jinye with the rewriting read/writeVirtualMemory for
+               part 2. Other than that, reviewed code, pointing out possible
+               corner cases, and helped write tests.
 -Jinye Xu:
