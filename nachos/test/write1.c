@@ -11,9 +11,10 @@ int
 main (int argc, char *argv[])
 {
     char *str = "\nroses are red\nviolets are blue\nI love Nachos\nand so do you\n\n";
-    
+    int f = open("text.txt");
+ 
     while (*str) {
-	write (1, str, 1);
+	write (f, str, 1);
 	str++;
     }
 

@@ -67,4 +67,7 @@ Work Contribution (Mostly peer programming, so work will overlap):
                helped Jinye with the rewriting read/writeVirtualMemory for
                part 2. Other than that, reviewed code, pointing out possible
                corner cases, and helped write tests.
--Jinye Xu:
+-Jinye Xu:     Assisted on writing code for all the parts. Implemented ReadVirtualMemory 
+	       writeVirtualMemory so that it is able to translate large physical 
+	       address. Wrote the tests for all parts of the project and help with debugging
+	       for the edge cases.

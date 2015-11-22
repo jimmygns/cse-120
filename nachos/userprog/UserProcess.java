@@ -652,11 +652,12 @@ public class UserProcess {
 			return -1;
 		}
 
-		int pointer = Lib.bytesToInt(data, 0);
+		//int pointer = Lib.bytesToInt(data, 0);
 		String[] arguments = new String[argc];
 
 		for (int i = 0; i < argc; ++i) {
-			arguments[i] = readVirtualMemoryString(pointer + i * 4, 256);
+			readVirtualMemory(argv+i*4, data);
+			arguments[i] = readVirtualMemoryString(Lib.bytesToInt(data, 0), 256);
 		}
 		
 		// Create new process, save necessary id's, and execute it
