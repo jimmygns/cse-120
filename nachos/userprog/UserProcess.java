@@ -64,12 +64,9 @@ public class UserProcess {
 		if (!load(name, args))
 			return false;
 
-		// Hold a reference to the root thread
+		// Hold a reference to the root thread and put the thread on the ready queue
 		processThread = new UThread(this).setName(name);
-		processThread.fork();       // Put that ish on the ready queue
-		
-		// This is the old code
-//		new UThread(this).setName(name).fork();
+		processThread.fork();
 
 		return true;
 	}
@@ -443,12 +440,14 @@ public class UserProcess {
 	 */
 	private int handleHalt() {
 		// Check if root process, if not, return immediately
-		if(pid != 0){
+		if (pid != 0) {
 			return 0;
 		}
+
 		Machine.halt();
 
 		Lib.assertNotReached("Machine.halt() did not halt machine!");
+
 		return 0;
 	}
 
@@ -459,8 +458,9 @@ public class UserProcess {
 		// Read name from virtual memory
 		String filename = readVirtualMemoryString(nameAddress, filenameMaxLength);
 
-		if (filename == null)
+		if (filename == null) {
 			return -1;
+		}
 
 		OpenFile file = ThreadedKernel.fileSystem.open(filename, true);
 
@@ -468,7 +468,7 @@ public class UserProcess {
 			return -1;
 		}
 
-		for(int i = 0; i < fileDescriptorTable.length; ++i) {
+		for (int i = 0; i < fileDescriptorTable.length; ++i) {
 			if (fileDescriptorTable[i] == null) {
 				fileDescriptorTable[i] = file;
 				return i;
@@ -522,7 +522,7 @@ public class UserProcess {
 			return -1;
 		}
 
-		// Check if memory accessed is within page bounds   TODO check might be wrong, might overflow past file allocation? i dunno
+		// Check if memory accessed is within page bounds
 		if (count + bufferAddress > numPages * pageSize) {
 			return -1;
 		}
@@ -530,7 +530,7 @@ public class UserProcess {
 		// Read data into the array from the file descriptor
 		OpenFile f = fileDescriptorTable[descriptor];
 		byte[] data = new byte[count];
-		int bytesRead = f.read(data, 0, count);   		//tell returns the current file pointer which is the offset
+		int bytesRead = f.read(data, 0, count);
 
 		// Check if bytes were actually read
 		if (bytesRead <= 0) {
@@ -557,7 +557,7 @@ public class UserProcess {
 			return -1;
 		}
 		
-		// Check if memory accessed is within page bounds TODO check might be wrong
+		// Check if memory accessed is within page bounds
 		if (count + bufferAddress > numPages * pageSize) {
 			return -1;
 		}
@@ -593,7 +593,6 @@ public class UserProcess {
 		}
 
 		fileDescriptorTable[descriptor].close();
-
 		fileDescriptorTable[descriptor] = null;
 
 		return 0;
@@ -611,18 +610,7 @@ public class UserProcess {
 			return -1;
 		}
 		
-		return (ThreadedKernel.fileSystem.remove(filename)) ? 0: -1;
-
-//		// This loop looks for the file being open in this process
-//		for (int i = 0; i < fileDescriptorTable.length; ++i) {
-//			if (filename == fileDescriptorTable[i].getName()) {
-//				// File found, mark for deletion, return success
-//				unlinkList.add(i);
-//				return 0;
-//			}
-//		}pid
-//
-//		return (ThreadedKernel.fileSystem.remove(filename)) ? 0 : -1;
+		return (ThreadedKernel.fileSystem.remove(filename)) ? 0 : -1;
 	}
 
 	/**
@@ -638,10 +626,11 @@ public class UserProcess {
 
 		// Check for proper .coff extension
         int ind = filename.lastIndexOf('.');
-        if(ind==-1) {
+        if(ind == -1) {
             return -1;
         }
-        if(!filename.substring(ind+1,filename.length()).equals("coff")) {
+
+        if (!filename.substring(ind  +  1, filename.length()).equals("coff")) {
         	return -1;
         }
 
@@ -652,12 +641,11 @@ public class UserProcess {
 			return -1;
 		}
 
-		//int pointer = Lib.bytesToInt(data, 0);
 		String[] arguments = new String[argc];
 
 		for (int i = 0; i < argc; ++i) {
-			readVirtualMemory(argv+i*4, data);
-			arguments[i] = readVirtualMemoryString(Lib.bytesToInt(data, 0), 256);
+			readVirtualMemory(argv + i * 4, data);
+			arguments[i] = readVirtualMemoryString(Lib.bytesToInt(data, 0), filenameMaxLength);
 		}
 		
 		// Create new process, save necessary id's, and execute it
@@ -665,8 +653,7 @@ public class UserProcess {
 		childProcess.add(child.pid);
 		child.parentPID = this.pid;
 		child.execute(filename, arguments);
-//		UserKernel.processMap.put(child.pid, child);
-		
+
 		return child.pid;
 	}
 
@@ -679,10 +666,9 @@ public class UserProcess {
 		}
 				
 		// Put current thread to sleep
-		UserKernel.processMap.get(pid).processThread.join();   // This code should handle sleeping and stuff
+		UserKernel.processMap.get(pid).processThread.join();
 
-		// Things to do when woken up TODO make atomic?
-		//childProcess.remove(new Integer(pid));  // set to remove object from childProcess list
+		// Things to do when woken up
 		if (UserKernel.processMap.get(pid).exceptionReturn) {
 			UserKernel.processMap.get(pid).handleExit(-1);
 			return 0;
@@ -693,7 +679,9 @@ public class UserProcess {
 		if (writtenBytes == 0) {
 			return 0;	
 		}
-		return 1;           // Method success, return 1
+
+		// Return 1 on success
+		return 1;
 	}
 
 	/**
@@ -704,7 +692,7 @@ public class UserProcess {
 
 		// Close all file descriptors
 		for (OpenFile f : fileDescriptorTable) {
-			if(f != null) {
+			if (f != null) {
 				f.close();
 			}
 		}
@@ -712,19 +700,18 @@ public class UserProcess {
 		// Free all memory
 		unloadSections();
 		
-		// Remove child process from parent process TODO make atomic?
+		// Remove child process from parent process
 		if (parentPID != -1) {
 			// If has parent, remove child from parent list
 			UserKernel.processMap.get(parentPID).childProcess.remove(new Integer(this.pid));
 		}
 		
-		// Go to all child processes and change parentPID to -1 TODO make atomic?
-		for(int tpid:childProcess) {
-			UserKernel.processMap.get(tpid).parentPID = -1;
+		// Go to all child processes and change parentPID to -1
+		for (int c : childProcess) {
+			UserKernel.processMap.get(c).parentPID = -1;
 		}
 		
 		// Remove process from hashmap
-		//UserKernel.processMap.remove(pid);
 		UserKernel.processLock.acquire();
 		
 		// If last process, halt the whole machine
@@ -736,8 +723,9 @@ public class UserProcess {
 		UserKernel.numOfProcess--;
 		UserKernel.processLock.release();
 		KThread.finish();
-		
-		return 1;   //return 1 on normal exit
+
+		// Return 1 on normal exit
+		return 1;
 	}
 
 	/**
@@ -823,7 +811,6 @@ public class UserProcess {
 			return handleJoin(a0, a1);
 		case syscallExit:
 			return handleExit(a0);
-
 		default:
 			Lib.debug(dbgProcess, "Unknown syscall " + syscall);
 			Lib.assertNotReached("Unknown system call!");
@@ -851,12 +838,10 @@ public class UserProcess {
 			processor.writeRegister(Processor.regV0, result);
 			processor.advancePC();
 			break;
-
 		default:
 			exceptionReturn = true;
 			handleExit(-1);
-			Lib.debug(dbgProcess, "Unexpected exception: "
-					+ Processor.exceptionNames[cause]);
+			Lib.debug(dbgProcess, "Unexpected exception: " + Processor.exceptionNames[cause]);
 			Lib.assertNotReached("Unexpected exception");
 		}
 	}
@@ -864,7 +849,14 @@ public class UserProcess {
 	public void setPID(int pid) {
 		this.pid = pid;
 	}
-	
+
+	// The number of pages in the program's stack
+	protected final int stackPages = 8;
+
+	private static final int pageSize = Processor.pageSize;
+
+	private static final char dbgProcess = 'a';
+
 	private static final int filenameMaxLength = 256;
 
 	private static final int fileDescriptorTableMaxLength = 16;
@@ -883,28 +875,20 @@ public class UserProcess {
 	// The number of contiguous pages occupied by the program
 	protected int numPages;
 
-	// The number of pages in the program's stack
-	protected final int stackPages = 8;
-
 	private int initialPC, initialSP;
 
 	private int argc, argv;
 
-	private int pid;
-	
-	private int parentPID;
-	
-	private boolean exceptionReturn = false;  // Tracks whether process had an exception or not
+	private int pid, parentPID;
+
+	private int exitStatus;
+
+	// Tracks whether process had an exception or not
+	private boolean exceptionReturn = false;
 
 	private ArrayList<Integer> childProcess = new ArrayList<Integer>();
 	
 	private OpenFile[] fileDescriptorTable;
 	
 	private KThread processThread;
-	
-	private int exitStatus;
-	
-	private static final int pageSize = Processor.pageSize;
-
-	private static final char dbgProcess = 'a';
 }
