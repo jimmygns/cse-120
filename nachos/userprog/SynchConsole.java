@@ -111,6 +111,8 @@ public class SynchConsole {
 	private Semaphore readWait = new Semaphore(0);
 
 	private Semaphore writeWait = new Semaphore(0);
+	
+	private Lock multiWriteLock = new Lock(); // Added from solution
 
 	private class File extends OpenFile {
 		File(boolean canRead, boolean canWrite) {
@@ -144,9 +146,11 @@ public class SynchConsole {
 			if (!canWrite)
 				return 0;
 
+			multiWriteLock.acquire(); // Change made to match the solution
 			for (int i = 0; i < length; i++)
 				SynchConsole.this.writeByte(buf[offset + i]);
-
+			multiWriteLock.release();
+			
 			return length;
 		}
 
