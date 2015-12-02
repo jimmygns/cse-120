@@ -28,12 +28,12 @@ public class UserProcess {
 		
 		this.pid = UserKernel.nextProcessID++;
 //		UserKernel.nextProcessID++;
-//		UserKernel.numOfProcess++;
+		UserKernel.numOfProcess++;
 		UserKernel.processMap.put(this.pid,this);
-		
+		parentPID = -1;	
 		UserKernel.processLock.release();
 
-//		parentPID = -1;
+
 
 		// Set 0 and 1 of table to execute files
 		fileDescriptorTable[0] = UserKernel.console.openForReading();
