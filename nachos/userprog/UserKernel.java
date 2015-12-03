@@ -140,7 +140,7 @@ public class UserKernel extends ThreadedKernel {
 	
 	public static int nextProcessID = 0;
 	
-	public static int numOfProcess = 0;
+	public static int numRunningProcesses = 0;
 
 	// Dummy variables to make javac smarter
 	private static Coff dummy1 = null;
