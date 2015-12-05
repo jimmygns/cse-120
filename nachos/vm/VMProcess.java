@@ -22,6 +22,15 @@ public class VMProcess extends UserProcess {
 	 */
 	public void saveState() {
 		super.saveState();
+		TranslationEntry entry;
+		for(int i=0;i<Machine.processor().getTLBSize();i++){
+			entry = Machine.processor().readTLBEntry(i);
+			if(entry.valid==true){
+				pageTable[entry.vpn]=entry;
+				entry.valid=false;
+				Machine.processor().writeTLBEntry(i, entry);
+			}
+		}
 	}
 
 	/**
@@ -29,7 +38,7 @@ public class VMProcess extends UserProcess {
 	 * <tt>UThread.restoreState()</tt>.
 	 */
 	public void restoreState() {
-		super.restoreState();
+		
 	}
 
 	/**
@@ -60,10 +69,43 @@ public class VMProcess extends UserProcess {
 		Processor processor = Machine.processor();
 
 		switch (cause) {
+		case Processor.exceptionTLBMiss:
+			handleTLBMiss();
+			break;
 		default:
 			super.handleException(cause);
 			break;
 		}
+	}
+
+	private void handleTLBMiss() {
+		// TODO Auto-generated method stub
+		TranslationEntry entry;
+		int index=-1;
+		for(int i=0;i<Machine.processor().getTLBSize();i++){
+			entry = Machine.processor().readTLBEntry(i);
+			if(entry.valid==false){
+				index=i;
+				break;
+			}
+		}
+		if(index==-1){
+			index = Lib.random(Machine.processor().getTLBSize());
+			TranslationEntry victim = Machine.processor().readTLBEntry(index);
+			pageTable[victim.vpn]=victim;
+		}
+		int vaddr = Machine.processor().readRegister(Processor.regBadVAddr);
+		int vpn = Processor.pageFromAddress(vaddr);
+		TranslationEntry PTE = pageTable[vpn];
+		if(PTE.valid)
+			Machine.processor().writeTLBEntry(index, PTE);
+		else{
+			if(PTE.dirty){
+				
+			}
+		}
+		
+		
 	}
 
 	private static final int pageSize = Processor.pageSize;

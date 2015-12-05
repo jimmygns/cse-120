@@ -14,6 +14,8 @@ public class VMKernel extends UserKernel {
 	 */
 	public VMKernel() {
 		super();
+		//TLBTable = new TranslationEntry[Machine.processor().getTLBSize()];
+		
 	}
 
 	/**
@@ -44,6 +46,8 @@ public class VMKernel extends UserKernel {
 		super.terminate();
 	}
 
+	//public static TranslationEntry[] TLBTable;
+	
 	// dummy variables to make javac smarter
 	private static VMProcess dummy1 = null;
 
