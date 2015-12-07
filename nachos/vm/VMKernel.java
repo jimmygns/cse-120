@@ -1,5 +1,7 @@
 package nachos.vm;
 
+import java.util.LinkedList;
+
 import nachos.machine.*;
 import nachos.threads.*;
 import nachos.userprog.*;
@@ -14,17 +16,19 @@ public class VMKernel extends UserKernel {
 	 */
 	public VMKernel() {
 		super();
-		//TLBTable = new TranslationEntry[Machine.processor().getTLBSize()];
-
+		freeSwapPages=new LinkedList<Integer>();
+		victim=0;
 		ipt = new PageFrame[Machine.processor().getNumPhysPages()];
 		for (int i = 0; i < ipt.length; ++i) {
-			ipt[i] = new PageFrame();
+			ipt[i] = new PageFrame(-1,null);
 		}
 
 		tlbLock  = new Lock();
 		swapLock = new Lock();
+		victimLock = new Lock();
 
 		swap = ThreadedKernel.fileSystem.open("swap", true);
+		
 	}
 
 	/**
@@ -72,17 +76,37 @@ public class VMKernel extends UserKernel {
 	//public static TranslationEntry[] TLBTable;
 
 	public class PageFrame {
+		public boolean used;
 		public int pid;
 		public TranslationEntry entry;
 		public int pinCount;
+		
+		
+		public PageFrame(int pid, TranslationEntry entry){
+			this.used=true;
+			this.pid = pid;
+			this.entry=entry;
+			this.pinCount=0;
+		}
+		
+		public void modifyPageFrame(int pid,TranslationEntry entry){
+			this.used=true;
+			this.pid = pid;
+			this.entry=entry;
+			this.pinCount=0;
+		}
 	}
 
 	// Inverted Page Table
 	public static PageFrame[] ipt;
 
-	public static Lock tlbLock, iptLock, swapLock;
+	public static Lock tlbLock, iptLock, swapLock, victimLock;
 
 	public static OpenFile swap;
+	
+	public static int victim;
+	
+	public static LinkedList<Integer> freeSwapPages;
 
 	// dummy variables to make javac smarter
 	private static VMProcess dummy1 = null;

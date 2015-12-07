@@ -883,7 +883,9 @@ public class UserProcess {
 
 	private int argc, argv;
 
-	private int pid, parentPID;
+	protected int pid;
+
+	private int parentPID;
 
 	private int exitStatus;
 
