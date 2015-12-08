@@ -2,6 +2,7 @@ package nachos.userprog;
 
 import nachos.machine.*;
 import nachos.threads.*;
+import nachos.vm.VMKernel;
 
 import java.io.EOFException;
 import java.util.ArrayList;
@@ -845,11 +846,14 @@ public class UserProcess {
 		}
 
 		entry.used = true;
-
+		VMKernel.pinPage(entry.ppn);
 		return entry.ppn;
 	}
 
 	protected void unpinVirtualPage(int vpn) {
+		// TODO unpin the physical page
+		// TODO wake up the sleeping threads on edge case
+		// conditionVariable.wakeAll();
 	}
 
 	// The number of pages in the program's stack

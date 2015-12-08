@@ -16,18 +16,7 @@ public class VMKernel extends UserKernel {
 	 */
 	public VMKernel() {
 		super();
-		freeSwapPages=new LinkedList<Integer>();
-		victim=0;
-		ipt = new PageFrame[Machine.processor().getNumPhysPages()];
-		for (int i = 0; i < ipt.length; ++i) {
-			ipt[i] = new PageFrame(-1,null);
-		}
-
-		tlbLock  = new Lock();
-		swapLock = new Lock();
-		victimLock = new Lock();
-
-		swap = ThreadedKernel.fileSystem.open("swap", true);
+		
 		
 	}
 
@@ -36,6 +25,21 @@ public class VMKernel extends UserKernel {
 	 */
 	public void initialize(String[] args) {
 		super.initialize(args);
+		freeSwapPages=new LinkedList<Integer>();
+		victim=0;
+		numOfPinnedPages=0;
+		ipt = new PageFrame[Machine.processor().getNumPhysPages()];
+		for (int i = 0; i < ipt.length; ++i) {
+			ipt[i] = new PageFrame(-1,new TranslationEntry(-1, -1, false, false,
+					false, false));
+		}
+		
+		iptLock = new Lock();
+		swapLock = new Lock();
+		victimLock = new Lock();
+		pinLock = new Lock();
+
+		swap = ThreadedKernel.fileSystem.open("swap", true);
 	}
 
 	/**
@@ -63,12 +67,14 @@ public class VMKernel extends UserKernel {
 
 	public static void pinPage(int ppn) {
 		iptLock.acquire();
+		numOfPinnedPages++;
 		++(ipt[ppn].pinCount);
 		iptLock.release();
 	}
 
 	public static void unpinPage(int ppn) {
 		iptLock.acquire();
+		numOfPinnedPages--;
 		--(ipt[ppn].pinCount);
 		iptLock.release();
 	}
@@ -76,21 +82,21 @@ public class VMKernel extends UserKernel {
 	//public static TranslationEntry[] TLBTable;
 
 	public class PageFrame {
-		public boolean used;
+		
 		public int pid;
 		public TranslationEntry entry;
 		public int pinCount;
 		
 		
 		public PageFrame(int pid, TranslationEntry entry){
-			this.used=true;
+			
 			this.pid = pid;
 			this.entry=entry;
 			this.pinCount=0;
 		}
 		
 		public void modifyPageFrame(int pid,TranslationEntry entry){
-			this.used=true;
+			
 			this.pid = pid;
 			this.entry=entry;
 			this.pinCount=0;
@@ -100,7 +106,9 @@ public class VMKernel extends UserKernel {
 	// Inverted Page Table
 	public static PageFrame[] ipt;
 
-	public static Lock tlbLock, iptLock, swapLock, victimLock;
+	public static int numOfPinnedPages;
+	
+	public static Lock iptLock, swapLock, victimLock, pinLock;
 
 	public static OpenFile swap;
 	
