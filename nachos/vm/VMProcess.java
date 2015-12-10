@@ -141,8 +141,8 @@ public class VMProcess extends UserProcess {
 	
 	/**
 	 *  
-	 * @param entry -- PageTable entry to get free page for
-	 * @param vpn -- VPN trying to access
+	 * @param entry -- PageTable entry we try to access
+	 * @param vpn -- VPN we try to access
 	 * @return
 	 */
 	private TranslationEntry handlePageFault(TranslationEntry entry, int vpn) {
@@ -156,17 +156,18 @@ public class VMProcess extends UserProcess {
 			entry= new TranslationEntry(vpn, assignedPPN, true, false, false, false);
 			UserKernel.memoryLock.release();
 		} 
-		else { 
+		else {
 		    //No free memory, need to evict a page 
 			
 			//TODO
 //		    Sync TLB entries; 
+			TranslationEntry entryNeedToBeSynced;
 			for(int i=0;i<Machine.processor().getTLBSize();i++){
-				entry = Machine.processor().readTLBEntry(i);
-				if(entry.valid){
-					pageTable[entry.vpn]=entry;
+				entryNeedToBeSynced = Machine.processor().readTLBEntry(i);
+				if(entryNeedToBeSynced.valid){
+					pageTable[entryNeedToBeSynced.vpn]=entryNeedToBeSynced;
 					VMKernel.iptLock.acquire();
-					VMKernel.ipt[entry.ppn].entry=entry;
+					VMKernel.ipt[entryNeedToBeSynced.ppn].entry=entryNeedToBeSynced;
 					VMKernel.iptLock.release();
 				}
 			}
@@ -187,18 +188,20 @@ public class VMProcess extends UserProcess {
 						VMKernel.victimLock.release();
 					}
 					else{
-						toEvict=VMKernel.ipt[VMKernel.victim].entry;
+						//toEvict=VMKernel.ipt[VMKernel.victim].entry;
 						break;
 					}
 				}
-			    VMKernel.victimLock.acquire();
-			    VMKernel.victim = (VMKernel.victim + 1) % VMKernel.ipt.length; 
-			    VMKernel.victimLock.release();
+				else{
+					VMKernel.victimLock.acquire();
+					VMKernel.victim = (VMKernel.victim + 1) % VMKernel.ipt.length; 
+					VMKernel.victimLock.release();
+				}
 			} 
 			toEvict = VMKernel.ipt[VMKernel.victim].entry; 
 			assignedPPN = toEvict.ppn;
 			
-		    if (toEvict.dirty&&!toEvict.readOnly) { 
+		    if (toEvict.dirty) {
 		    	VMKernel.swapLock.acquire();
 		    	int spn=-1;
 		    	for(int i =0;i<VMKernel.freeSwapPages.size();i++){
@@ -210,7 +213,7 @@ public class VMProcess extends UserProcess {
 		    	}
 		    	if(spn==-1){
 		    		spn=VMKernel.freeSwapPages.size();
-		    		VMKernel.freeSwapPages.add(VMKernel.freeSwapPages.size());
+		    		VMKernel.freeSwapPages.add(spn);
 		    	}
 		    	//TODO
 		    	byte[] memory = Machine.processor().getMemory();
@@ -218,10 +221,18 @@ public class VMProcess extends UserProcess {
 		    	int offset = toEvict.ppn*pageSize;
 		    	VMKernel.swap.write(spn*pageSize, memory,offset, pageSize);
 		    	VMKernel.swapLock.release();
-		    	entry= new TranslationEntry(vpn, assignedPPN, true, false, false, false);
-		    	toEvict.ppn=spn;
-		    	toEvict.valid=false;
-		    	VMKernel.ipt[toEvict.ppn].modifyPageFrame(this.pid, entry);
+		    	//TODO
+		    	//maybe this should happen after
+		    	//entry= new TranslationEntry(vpn, assignedPPN, true, false, false, false);
+		    	
+		    	//Invalidate PTE and TLB entry of the victim page 
+		    	//toEvict.ppn=spn;
+		    	//toEvict.valid=false;
+		    	pageTable[toEvict.vpn].valid=false;
+		    	VMKernel.iptLock.acquire();
+		    	//VMKernel.ipt[toEvict.ppn].modifyPageFrame(this.pid, entry);
+		    	VMKernel.ipt[toEvict.ppn].entry.valid=false;
+		    	VMKernel.iptLock.release();
 		    	
 		    } 
 		    
