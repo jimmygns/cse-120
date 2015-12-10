@@ -28,7 +28,6 @@ public class UserKernel extends ThreadedKernel {
 
 		console = new SynchConsole(Machine.console());
 
-
 		Machine.processor().setExceptionHandler(new Runnable() {
 			public void run() {
 				exceptionHandler();
@@ -38,15 +37,9 @@ public class UserKernel extends ThreadedKernel {
 		memoryLock = new Lock();
 		processLock = new Lock();
 
-		// Given by solution
-		for (int ppn=0; ppn<Machine.processor().getNumPhysPages(); ppn++)
-		    freePages.add(new Integer(ppn));
-		
-		
-//		// Create virtual page addresses, done in reverse for error checking
-//		for (int i = Machine.processor().getNumPhysPages() - 1; i >= 0; --i) {
-//			freePages.add(i); // 0 offset because we don't know what that does
-//		}
+		// Create virtual page addresses
+		for (int i = 0; i < Machine.processor().getNumPhysPages(); ++i)
+		    freePages.add(i);
 	}
 
 	/**
@@ -131,12 +124,9 @@ public class UserKernel extends ThreadedKernel {
 	// Linked list of all free pages in physical memory
 	public static LinkedList<Integer> freePages = new LinkedList<Integer>();
 	
-	
 	public static Lock processLock;
 	
 	public static Lock memoryLock;
-	
-	public static Map<Integer,UserProcess> processMap = new HashMap<Integer, UserProcess>();
 	
 	public static int nextProcessID = 0;
 	

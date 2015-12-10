@@ -2,10 +2,9 @@ package nachos.userprog;
 
 import nachos.machine.*;
 import nachos.threads.*;
-import nachos.vm.VMKernel;
 
 import java.io.EOFException;
-import java.util.ArrayList;
+import java.util.HashMap;
 
 /**
  * Encapsulates the state of a user process that is not contained in its user
@@ -25,11 +24,7 @@ public class UserProcess {
 	 */
 	public UserProcess() {
 		UserKernel.processLock.acquire();
-
 		this.pid = UserKernel.nextProcessID++;
-		UserKernel.processMap.put(this.pid,this);
-		parentPID = -1;
-
 		UserKernel.processLock.release();
 
 		// Set 0 and 1 of table to execute files
@@ -622,13 +617,16 @@ public class UserProcess {
 		// Create new process, save necessary id's, and execute it
 		int childPID = -1;
 		UserProcess child = UserProcess.newUserProcess();
-		child.parentPID = this.pid;
+		child.parentProcess = this;
 
 		UserKernel.processLock.acquire();
+
+		// Execute the child and add to parent's list of child processes
 		if (child.execute(filename, arguments)){
 			childPID = child.pid;
-			childProcess.add(childPID);
+			childProcesses.put(childPID, child);
 		}
+
 		UserKernel.processLock.release();
 
 		return childPID;
@@ -637,28 +635,24 @@ public class UserProcess {
 	/**
 	 * handle the join() system call.
 	 */
-	private int handleJoin(int pid, int statusAddressPointer) {
-		if (!childProcess.contains(pid)) {
+	private int handleJoin(int pid, int statusAddress) {
+		if (childProcesses.get(pid) == null) {
 			return -1;
 		}
 
-		// TODO there was a processlock in soln' but implementation is different
-		int result = 1;
+		int result = 0;
+
 		UserKernel.processLock.acquire();
 
-		// Put current thread to sleep
-		UserKernel.processMap.get(pid).processThread.join();
+		// Put current process thread to sleep until child (specified by pid arg) has exited
+		while (!childProcessesExitStatus.containsKey(pid))
+			childFinished.sleep();
 
-		// Things to do when woken up
-		if (UserKernel.processMap.get(pid).exceptionReturn) {
-			UserKernel.processMap.get(pid).handleExit(-1);
-			result = 0;
-		}
+		Integer status = childProcessesExitStatus.get(pid);
 
-		byte[] byteArray = Lib.bytesFromInt(UserKernel.processMap.get(pid).exitStatus);
-		int writtenBytes = writeVirtualMemory(statusAddressPointer, byteArray);
-		if (writtenBytes == 0) {
-			result = 0;
+		if (status != null) {
+			result = 1;
+			writeVirtualMemory(statusAddress, Lib.bytesFromInt(status.intValue()));
 		}
 
 		UserKernel.processLock.release();
@@ -670,8 +664,6 @@ public class UserProcess {
 	 * handle the exit() system call.
 	 */
 	private int handleExit(int status) {
-		this.exitStatus = status;
-
 		// Close all file descriptors
 		for (OpenFile f : fileDescriptorTable) {
 			if (f != null) {
@@ -687,15 +679,10 @@ public class UserProcess {
 
 		UserKernel.processLock.acquire();
 
-		// Remove child process from parent process
-		if (parentPID != -1) {
-			// If has parent, remove child from parent list
-			UserKernel.processMap.get(parentPID).childProcess.remove(new Integer(this.pid));
-		}
-
-		// Go to all child processes and change parentPID to -1
-		for (int c : childProcess) {
-			UserKernel.processMap.get(c).parentPID = -1;
+		// If there's a parent process, add the exit status to the parent's exist status table
+		if (parentProcess != null) {
+			parentProcess.childProcessesExitStatus.put(pid, exceptionReturn ? null : status);
+			parentProcess.childFinished.wake();
 		}
 
 		// If last process, halt the whole machine
@@ -704,11 +691,11 @@ public class UserProcess {
 		}
 
 		UserKernel.processLock.release();
+
 		KThread.finish();
 
 		Lib.assertNotReached("KThread.finish() did not finish thread!");
 
-		// Return 1 on normal exit
 		return 0;
 	}
 
@@ -846,7 +833,7 @@ public class UserProcess {
 		}
 
 		entry.used = true;
-		VMKernel.pinPage(entry.ppn);
+		//VMKernel.pinPage(entry.ppn);
 		return entry.ppn;
 	}
 
@@ -889,14 +876,16 @@ public class UserProcess {
 
 	protected int pid;
 
-	private int parentPID;
-
-	private int exitStatus;
-
 	// Tracks whether process had an exception or not
 	private boolean exceptionReturn = false;
 
-	private ArrayList<Integer> childProcess = new ArrayList<Integer>();
+	private Condition childFinished = new Condition(UserKernel.processLock);
+
+	private UserProcess parentProcess;
+
+	private HashMap<Integer, UserProcess> childProcesses = new HashMap<>();
+
+	private HashMap<Integer, Integer> childProcessesExitStatus = new HashMap<>();
 
 	private OpenFile[] fileDescriptorTable = new OpenFile[maxFiles];
 
