@@ -31,7 +31,7 @@ public class VMKernel extends UserKernel {
 
 		ipt = new PageFrame[Machine.processor().getNumPhysPages()];
 		for (int i = 0; i < ipt.length; ++i) {
-			ipt[i] = new PageFrame(-1,new TranslationEntry(-1, -1, false, false, false, false));
+			ipt[i] = new PageFrame(null);
 		}
 		
 		iptLock = new Lock();
@@ -61,8 +61,8 @@ public class VMKernel extends UserKernel {
 	 */
 	public void terminate() {
 		super.terminate();
-//		swap.close();
-//		ThreadedKernel.fileSystem.remove("swap");
+		swap.close();
+		ThreadedKernel.fileSystem.remove("swap");
 	}
 
 	public static void pinPage(int ppn) {
@@ -83,21 +83,16 @@ public class VMKernel extends UserKernel {
 
 	public class PageFrame {
 		
-		public int pid;
-		public TranslationEntry entry;
+		public TranslationEntry entry;  // Reference 
 		public int pinCount;
 		
 		
-		public PageFrame(int pid, TranslationEntry entry){
-			
-			this.pid = pid;
+		public PageFrame(TranslationEntry entry){
 			this.entry=entry;
 			this.pinCount=0;
 		}
 		
-		public void modifyPageFrame(int pid,TranslationEntry entry){
-			
-			this.pid = pid;
+		public void modifyPageFrame(TranslationEntry entry){
 			this.entry=entry;
 			this.pinCount=0;
 		}
@@ -105,6 +100,8 @@ public class VMKernel extends UserKernel {
 
 	// Inverted Page Table
 	public static PageFrame[] ipt;
+	
+	static int justWritten = -1;
 
 	public static int numOfPinnedPages;
 	
