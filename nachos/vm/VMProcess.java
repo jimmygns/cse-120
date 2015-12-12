@@ -158,13 +158,22 @@ public class VMProcess extends UserProcess {
 			tlbEntry = new TranslationEntry(vpn, UserKernel.freePages.pop(), true, false, false, false); // Set readOnly and used bit?
 		} else { //No free memory, need to evict a page
 		    // Sync TLB entries; 
-			TranslationEntry entryNeedToBeSynced;
+			TranslationEntry syncEntry;
 			for(int i=0;i<Machine.processor().getTLBSize();i++){
-				entryNeedToBeSynced = Machine.processor().readTLBEntry(i);
-				if(entryNeedToBeSynced.valid){
-					pageTable[entryNeedToBeSynced.vpn]=entryNeedToBeSynced;
+				syncEntry = Machine.processor().readTLBEntry(i);
+				if(syncEntry.valid){
+					TranslationEntry old = pageTable[syncEntry.vpn];
+					syncEntry(old,syncEntry);
+					Lib.assertTrue(pageTable[syncEntry.vpn].vpn == syncEntry.vpn);
+					Lib.assertTrue(pageTable[syncEntry.vpn].ppn == syncEntry.ppn);
+					Lib.assertTrue(pageTable[syncEntry.vpn].valid == syncEntry.valid);
+					Lib.assertTrue(pageTable[syncEntry.vpn].readOnly == syncEntry.readOnly);
+					Lib.assertTrue(pageTable[syncEntry.vpn].used == syncEntry.used);
+					Lib.assertTrue(pageTable[syncEntry.vpn].dirty == syncEntry.dirty);
+
+					//pageTable[syncEntry.vpn]=syncEntry;
 					VMKernel.iptLock.acquire();
-					VMKernel.ipt[entryNeedToBeSynced.ppn].entry=entryNeedToBeSynced;
+					VMKernel.ipt[syncEntry.ppn].entry=syncEntry;
 					VMKernel.iptLock.release();
 				}
 			}
@@ -261,6 +270,8 @@ public class VMProcess extends UserProcess {
 			// Check vpn belongs to a CoffSection
 			CoffSection section = vpnCoffMap.get(vpn);
 			pageTable[vpn].readOnly = section.isReadOnly();
+			// if coff not, set dirty bit
+			tlbEntry.readOnly = pageTable[vpn].readOnly;
 			section.loadPage(vpn - section.getFirstVPN(), tlbEntry.ppn);  // SPN is vpn - section.get
 		} else {  // Not a COFF section, zero out stack page
 			// Get memory, for that section of memory (bytes from start index to startIndex + page size), 0
@@ -268,7 +279,7 @@ public class VMProcess extends UserProcess {
 	    	for(int i=0;i<pageSize;i++) {
 	    		memory[tlbEntry.ppn*pageSize + i] = 0;  
 	    	}
-	    	entry.dirty=true;
+//	    	entry.dirty=true;
 		}
 		
 
@@ -325,6 +336,16 @@ public class VMProcess extends UserProcess {
 		*/
 		//return entry;
 
+	}
+	
+	// Sync's entries
+	public static void syncEntry(TranslationEntry old, TranslationEntry sync) {
+		old.vpn = sync.vpn;
+		old.ppn = sync.ppn;
+		old.valid = sync.valid;
+		old.readOnly = sync.readOnly;
+		old.used = sync.used;
+		old.dirty = sync.dirty;
 	}
 
 	private HashMap<Integer, CoffSection> vpnCoffMap = new HashMap<>();
