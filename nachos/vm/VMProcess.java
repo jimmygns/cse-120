@@ -28,7 +28,6 @@ public class VMProcess extends UserProcess {
 		super.saveState();
 
 		TranslationEntry entry;
-		System.out.println("saveState");
 		for (int i = 0; i < Machine.processor().getTLBSize(); ++i) {
 			entry = Machine.processor().readTLBEntry(i);
 
@@ -63,15 +62,17 @@ public class VMProcess extends UserProcess {
 
 		// Give the process the amount of pages it needs
 		for (int i = 0; i < numPages; ++i) {
-			pageTable[i] = new TranslationEntry(i, -1, false, false, false, true);   // Assume dirty
+			pageTable[i] = new TranslationEntry(i, -1, false, false, false, false);   // Assume dirty
 		}
 
 		// Map VPN to CoffSection
 		for (int i = 0; i < coff.getNumSections(); ++i) {
 			CoffSection section = coff.getSection(i);
-			pageTable[i].dirty = false;               // Coff section pages are not dirty
+			pageTable[i].dirty = false;               // Coff section readonly pages are not dirty
 			for (int j = 0; j < section.getLength(); ++j) {
-				vpnCoffMap.put(section.getFirstVPN() + j, section);
+				int vpn = section.getFirstVPN() + j;
+				pageTable[vpn].readOnly = section.isReadOnly();
+				vpnCoffMap.put(vpn, section);
 			}
 		}
 
@@ -169,6 +170,9 @@ public class VMProcess extends UserProcess {
 		for(int i=0;i<Machine.processor().getTLBSize();i++){
 			syncEntry = Machine.processor().readTLBEntry(i);
 			if(syncEntry.valid){
+				if(syncEntry.dirty) {
+					System.out.println("DIRTY!");
+				}
 				// Sync ipt entry ref
 				VMKernel.iptLock.acquire();
 				syncEntry(VMKernel.ipt[syncEntry.ppn].entry,syncEntry);
@@ -185,6 +189,7 @@ public class VMProcess extends UserProcess {
 	 * @return
 	 */
 	private TranslationEntry handlePageFault(TranslationEntry entry) {
+		
 		for(int i=0;i<pageTable.length;i++){
 			Lib.assertTrue(pageTable[i].vpn==i);
 		}
@@ -253,7 +258,6 @@ public class VMProcess extends UserProcess {
 //					VMKernel.victimLock.release();
 				}
 			}
-			System.out.println("Victim: " + VMKernel.victim);
 			toEvict = VMKernel.ipt[VMKernel.victim].entry;      // Ref to Victim in the physical page table entry
 			VMKernel.victimLock.release();
 			VMKernel.iptLock.release(); 
@@ -300,22 +304,40 @@ public class VMProcess extends UserProcess {
 		// TODO do we need lock for machine processor memory?
 		
 		
+//		if (entry.ppn==-1) {
+			
+			
+//			
+//			do lazy loading (this is the second step in the strategy guide,
+//		    reading from COFF or zeroing bytes in stack/arg pages)
+//			} else { // second or later miss
+//				if (TE is readOnly) {
+//					read from COFF (this will only happen for code pages)
+//				} else {
+//					read from swap file
+//				}
+//
+//			}
+//		
+		
+		
 		// Check if the TLB TranslationEntry is dirty - If so, Swap In, already checks for 
 		if (entry.dirty) {                    // Is in disk
 			// Read swap to get data
+			System.out.println("Swap in");
 			byte[] memory = Machine.processor().getMemory();
 			// entry.ppn currently refers to entry's swp, tlbEntry refers to ppn
+			VMKernel.freeSwapPages.set(entry.ppn,null);
 			if(VMKernel.swap.read(entry.ppn*pageSize,memory, tlbEntry.ppn*pageSize, pageSize) <= 0) {
 				System.out.println("Error, did not read memory"); // TODO change error
 			}
-//			entry.dirty = false;   // No longer dirty since paging in
+			entry.dirty = false;   // No longer dirty since paging in
 		} else if(entry.vpn < vpnCoffMap.size()) {     // Is coff section
 			// Check vpn belongs to a CoffSection
 			CoffSection section = vpnCoffMap.get(entry.vpn);
-			pageTable[entry.vpn].readOnly = section.isReadOnly();
 			// if coff not, set dirty bit TODO do we actually do this or possible errors?
-			if(!pageTable[entry.vpn].readOnly)
-				pageTable[entry.vpn].dirty=true;
+//			if(!pageTable[entry.vpn].readOnly)
+//				pageTable[entry.vpn].dirty=true;
 			tlbEntry.readOnly = pageTable[entry.vpn].readOnly;
 			section.loadPage(entry.vpn - section.getFirstVPN(), tlbEntry.ppn);  // SPN is vpn - section.get
 		} else {  // Not a COFF section, zero out stack page
@@ -324,19 +346,13 @@ public class VMProcess extends UserProcess {
 	    	for(int i=0;i<pageSize;i++) {
 	    		memory[tlbEntry.ppn*pageSize + i] = 0;  
 	    	}
-	    	tlbEntry.dirty=true;
+//	    	tlbEntry.dirty=true;
 		}
 		
 
 		// Update Page Table and IPT
 		syncEntry(pageTable[entry.vpn],tlbEntry);
 		
-		
-		for(int i=0;i<pageTable.length;i++){
-			System.out.println(pageTable[i].vpn);
-			System.out.println();
-			Lib.assertTrue(pageTable[i].vpn==i);
-		}
 //		pageTable[vpn] = tlbEntry;
 		VMKernel.iptLock.acquire();
 		VMKernel.ipt[tlbEntry.ppn].entry = pageTable[entry.vpn];
