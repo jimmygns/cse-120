@@ -2,6 +2,7 @@ package nachos.userprog;
 
 import nachos.machine.*;
 import nachos.threads.*;
+import nachos.vm.VMKernel;
 
 import java.io.EOFException;
 import java.util.HashMap;
@@ -685,6 +686,8 @@ public class UserProcess {
 			parentProcess.childFinished.wake();
 		}
 
+		System.out.println("Exit status: " + status); // TODO remove
+		
 		// If last process, halt the whole machine
 		if (--UserKernel.numRunningProcesses == 0) {
 			Kernel.kernel.terminate();
@@ -832,8 +835,10 @@ public class UserProcess {
 			entry.dirty = true;
 		}
 
+		
+		// Synch to tlb and ipt
 		entry.used = true;
-		//VMKernel.pinPage(entry.ppn);
+		VMKernel.pinPage(entry.ppn);
 		return entry.ppn;
 	}
 

@@ -61,8 +61,8 @@ public class VMKernel extends UserKernel {
 	 */
 	public void terminate() {
 		super.terminate();
-		swap.close();
-		ThreadedKernel.fileSystem.remove("swap");
+//		swap.close();
+//		ThreadedKernel.fileSystem.remove("swap");
 	}
 
 	public static void pinPage(int ppn) {
