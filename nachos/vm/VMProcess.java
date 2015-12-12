@@ -34,7 +34,8 @@ public class VMProcess extends UserProcess {
 
 			if (entry.valid) {
 				// Synch tlb entry to page table
-				pageTable[entry.vpn] = new TranslationEntry(entry);  // Copy by value
+//				pageTable[entry.vpn] = new TranslationEntry(entry);  // Copy by value
+				syncEntry(pageTable[entry.vpn],entry);
 				entry.valid = false;
 				Machine.processor().writeTLBEntry(i, entry);
 			}
@@ -122,10 +123,12 @@ public class VMProcess extends UserProcess {
 			index = Lib.random(Machine.processor().getTLBSize());
 			TranslationEntry victim = Machine.processor().readTLBEntry(index);
 			// Sync pageTable with tlb entry
-			pageTable[victim.vpn]=victim;
+			syncEntry(pageTable[victim.vpn],victim);
+//			pageTable[victim.vpn]=victim;
 			//sync ipt TODO sync why?
 			VMKernel.iptLock.acquire();
-			VMKernel.ipt[victim.ppn].entry=victim;
+			syncEntry(VMKernel.ipt[victim.ppn].entry,victim);
+//			VMKernel.ipt[victim.ppn].entry=victim;
 			VMKernel.iptLock.release();
 		}
 
@@ -134,7 +137,7 @@ public class VMProcess extends UserProcess {
 		int missVPN = Processor.pageFromAddress(missVAddress);
 		
 		// Under strategy guide, says if the TLB entry is a write, synch TLB with PageTable of process after setting used and dirty to true?
-		TranslationEntry tlbPTE = pageTable[missVPN];
+		TranslationEntry tlbPTE = new TranslationEntry(pageTable[missVPN]);   // Don't want reference
 		if(tlbPTE.valid) {
 			Machine.processor().writeTLBEntry(index, tlbPTE);
 		}
@@ -143,6 +146,33 @@ public class VMProcess extends UserProcess {
 		}
 	}
 	
+	
+	
+	private void syncTLBEntries() {
+		TranslationEntry syncEntry;
+		for(int i=0;i<Machine.processor().getTLBSize();i++){
+			syncEntry = Machine.processor().readTLBEntry(i);
+			if(syncEntry.valid&&syncEntry.dirty)
+				System.out.println("V&D::VPN: " + syncEntry.vpn + " PPN: " + syncEntry.ppn);
+			if(syncEntry.valid){
+				syncEntry(pageTable[syncEntry.vpn],syncEntry);
+				Lib.assertTrue(pageTable[syncEntry.vpn].vpn == syncEntry.vpn);
+				Lib.assertTrue(pageTable[syncEntry.vpn].ppn == syncEntry.ppn);
+				Lib.assertTrue(pageTable[syncEntry.vpn].valid == syncEntry.valid);
+				Lib.assertTrue(pageTable[syncEntry.vpn].readOnly == syncEntry.readOnly);
+				Lib.assertTrue(pageTable[syncEntry.vpn].used == syncEntry.used);
+				Lib.assertTrue(pageTable[syncEntry.vpn].dirty == syncEntry.dirty);
+
+				//pageTable[syncEntry.vpn]=syncEntry;
+				VMKernel.iptLock.acquire();
+				syncEntry(VMKernel.ipt[syncEntry.ppn].entry,syncEntry);
+//				VMKernel.ipt[syncEntry.ppn].entry=syncEntry;
+				VMKernel.iptLock.release();
+			}
+		}
+	}
+	
+	
 	/**
 	 *  
 	 * @param entry -- PageTable Entry that we tried to find in TLB but caused miss
@@ -150,7 +180,9 @@ public class VMProcess extends UserProcess {
 	 * @return
 	 */
 	private TranslationEntry handlePageFault(TranslationEntry entry, int vpn) {
+//		privilege.stats.pageFaults++;
 		TranslationEntry tlbEntry = null;
+		syncTLBEntries();
 		
 		// Allocate a Physical Page
 		UserKernel.memoryLock.acquire();
@@ -161,9 +193,10 @@ public class VMProcess extends UserProcess {
 			TranslationEntry syncEntry;
 			for(int i=0;i<Machine.processor().getTLBSize();i++){
 				syncEntry = Machine.processor().readTLBEntry(i);
+				if(syncEntry.valid&&syncEntry.dirty)
+					System.out.println("V&D::VPN: " + syncEntry.vpn + " PPN: " + syncEntry.ppn);
 				if(syncEntry.valid){
-					TranslationEntry old = pageTable[syncEntry.vpn];
-					syncEntry(old,syncEntry);
+					syncEntry(pageTable[syncEntry.vpn],syncEntry);
 					Lib.assertTrue(pageTable[syncEntry.vpn].vpn == syncEntry.vpn);
 					Lib.assertTrue(pageTable[syncEntry.vpn].ppn == syncEntry.ppn);
 					Lib.assertTrue(pageTable[syncEntry.vpn].valid == syncEntry.valid);
@@ -173,7 +206,8 @@ public class VMProcess extends UserProcess {
 
 					//pageTable[syncEntry.vpn]=syncEntry;
 					VMKernel.iptLock.acquire();
-					VMKernel.ipt[syncEntry.ppn].entry=syncEntry;
+					syncEntry(VMKernel.ipt[syncEntry.ppn].entry,syncEntry);
+//					VMKernel.ipt[syncEntry.ppn].entry=syncEntry;
 					VMKernel.iptLock.release();
 				}
 			}
@@ -193,11 +227,18 @@ public class VMProcess extends UserProcess {
 //						VMKernel.victimLock.acquire();
 						VMKernel.victim = (VMKernel.victim + 1) % VMKernel.ipt.length;
 						if(VMKernel.victim==Integer.MAX_VALUE) {     // Make sure victim value does not exceed max
+							System.out.println("int max!");
 							VMKernel.victim = 0;
 						}
 //						VMKernel.victimLock.release();
 					}
 					else{
+						// Still increment clock
+						VMKernel.victim = (VMKernel.victim + 1) % VMKernel.ipt.length;
+						if(VMKernel.victim==Integer.MAX_VALUE) {     // Make sure victim value does not exceed max
+							System.out.println("int max!");
+							VMKernel.victim = 0;
+						}
 						break;
 					}
 				}
@@ -205,6 +246,7 @@ public class VMProcess extends UserProcess {
 //					VMKernel.victimLock.acquire();
 					VMKernel.victim = (VMKernel.victim + 1) % VMKernel.ipt.length;
 					if(VMKernel.victim==Integer.MAX_VALUE) {     // Make sure victim value does not exceed max
+						System.out.println("int max!");
 						VMKernel.victim = 0;
 					}
 //					VMKernel.victimLock.release();
@@ -212,10 +254,13 @@ public class VMProcess extends UserProcess {
 			}
 			VMKernel.iptLock.acquire();
 			toEvict = VMKernel.ipt[VMKernel.victim].entry;      // Victim in the physical page table entry
+			System.out.println("Evicting PPN: " + VMKernel.victim);
+			if(toEvict.dirty) {
+				System.out.println("::::::::::::::::::::::::::::FIJWEIOFJIWEOJFIWEOJF");
+			}
 			VMKernel.iptLock.release(); // TODO might not need
 			VMKernel.victimLock.release();    // Replaced code here TODO
 			tlbEntry = new TranslationEntry(vpn, toEvict.ppn, true, false, false, false); // TODO set readOnly and used bit?
-			System.out.println("toevict: " + toEvict.dirty);
 			if (toEvict.dirty) {       // Only write to disk if the page is dirty
 				// Search for free swap page, create a new one if you can't find one
 				System.out.println("Swap out");
@@ -270,7 +315,9 @@ public class VMProcess extends UserProcess {
 			// Check vpn belongs to a CoffSection
 			CoffSection section = vpnCoffMap.get(vpn);
 			pageTable[vpn].readOnly = section.isReadOnly();
-			// if coff not, set dirty bit
+			// if coff not, set dirty bit TODO do we actually do this or possible errors?
+			if(!pageTable[vpn].readOnly)
+				pageTable[vpn].dirty=true;
 			tlbEntry.readOnly = pageTable[vpn].readOnly;
 			section.loadPage(vpn - section.getFirstVPN(), tlbEntry.ppn);  // SPN is vpn - section.get
 		} else {  // Not a COFF section, zero out stack page
@@ -284,9 +331,11 @@ public class VMProcess extends UserProcess {
 		
 
 		// Update Page Table and IPT
-		pageTable[vpn] = tlbEntry;
+		syncEntry(pageTable[vpn],tlbEntry);
+//		pageTable[vpn] = tlbEntry;
 		VMKernel.iptLock.acquire();
-		VMKernel.ipt[tlbEntry.ppn].entry = tlbEntry;
+		syncEntry(VMKernel.ipt[tlbEntry.ppn].entry,tlbEntry);
+//		VMKernel.ipt[tlbEntry.ppn].entry = tlbEntry;
 		VMKernel.iptLock.release();
 
 		return tlbEntry;
