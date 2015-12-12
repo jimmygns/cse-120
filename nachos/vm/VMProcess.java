@@ -28,12 +28,13 @@ public class VMProcess extends UserProcess {
 		super.saveState();
 
 		TranslationEntry entry;
-
+		System.out.println("saveState");
 		for (int i = 0; i < Machine.processor().getTLBSize(); ++i) {
 			entry = Machine.processor().readTLBEntry(i);
 
 			if (entry.valid) {
-				pageTable[entry.vpn] = entry;
+				// Synch tlb entry to page table
+				pageTable[entry.vpn] = new TranslationEntry(entry);  // Copy by value
 				entry.valid = false;
 				Machine.processor().writeTLBEntry(i, entry);
 			}
@@ -55,7 +56,7 @@ public class VMProcess extends UserProcess {
 	 */
 	protected boolean loadSections() {
 		UserKernel.memoryLock.acquire();
-
+		System.out.println("NumPages Needed: " + numPages);
 		if (numPages > UserKernel.freePages.size()) {
 			UserKernel.memoryLock.release();
 			coff.close();
@@ -111,9 +112,7 @@ public class VMProcess extends UserProcess {
 			break;
 		}
 	}
-
 	private void handleTLBMiss() {
-		// TODO, we write to the TLB incorrectly, check incoming Vpn make sure it writes to table correctly
 		TranslationEntry entry;
 		int index = -1;
 
@@ -127,49 +126,66 @@ public class VMProcess extends UserProcess {
 				break;
 			}
 		}
+		// TODO don't evict recently evicted
 		// No invalid entries so only process entries right now, randomly evict one, and sync to the page table
 		if (index==-1) {
+			System.out.println("no invalid");
 			// Get random index, and make that the victim
 			index = Lib.random(Machine.processor().getTLBSize());
 			TranslationEntry victim = Machine.processor().readTLBEntry(index);
 			// Sync pageTable with tlb entry
 			pageTable[victim.vpn]=victim;
-			//sync ipt
+			//sync ipt TODO sync why?
 			VMKernel.iptLock.acquire();
 			VMKernel.ipt[victim.ppn].entry=victim;
 			VMKernel.iptLock.release();
 		}
 
-		// Find the PTE of the TLB
+		// Find the PTE of the TLB Miss
 		int tlbVAddr = Machine.processor().readRegister(Processor.regBadVAddr);
 		int tlbVPN = Processor.pageFromAddress(tlbVAddr);
+		System.out.println("tlbVPN: " + tlbVPN);
+		
 
 		TranslationEntry tlbPTE = pageTable[tlbVPN];
-		if(tlbPTE.valid)
+		System.out.println("tlbValid?: " + tlbPTE.valid);
+		if(tlbPTE.valid) {
+			System.out.println("isvalid");
 			Machine.processor().writeTLBEntry(index, tlbPTE);
+		}
 		else{
-			Machine.processor().writeTLBEntry(index, handlePageFault(tlbPTE, tlbVPN));
+			TranslationEntry temp = handlePageFault(tlbPTE, tlbVPN);
+			System.out.println("validbit: " + temp.valid);
+			Machine.processor().writeTLBEntry(index, temp);
+			
+//			Machine.processor().writeTLBEntry(index, handlePageFault(tlbPTE, tlbVPN));
 		}
 	}
 	
 	/**
 	 *  
-	 * @param entry -- PageTable entry we try to access
-	 * @param vpn -- VPN we try to access
+	 * @param entry -- PageTable Entry that we tried to find in TLB but caused miss
+	 * @param vpn -- VPN of what we were trying to access
 	 * @return
 	 */
 	private TranslationEntry handlePageFault(TranslationEntry tlbEntry, int vpn) {
+//		System.out.println("Processes: " + UserKernel.numRunningProcesses);
+//		System.out.println("Processor pages: " + Machine.processor().getNumPhysPages());
 		int assignedPPN;
 		TranslationEntry entry = null;
 
+		
+		
+		
 		// Allocate a Physical Page
 		UserKernel.memoryLock.acquire();
 		if (!UserKernel.freePages.isEmpty()) {
-			entry = new TranslationEntry(vpn, UserKernel.freePages.pop(), true, false, false, false);
-			UserKernel.memoryLock.release();
+			assignedPPN = UserKernel.freePages.pop();
+			entry = new TranslationEntry(vpn, assignedPPN, true, false, false, false);
 		}  else {
-			UserKernel.memoryLock.release();
-
+			System.out.println("noFreePages");
+			System.out.println("Free pages: "+ UserKernel.freePages.size());
+			assignedPPN = 3; // Dummy val
 			// No free memory - need to evict a page
 
 			// Symc TLB entries
@@ -182,21 +198,32 @@ public class VMProcess extends UserProcess {
 
 			// Invalidate PTE and TLB entry of the victim page
 		}
+		UserKernel.memoryLock.release();
 
+		
 		// Check if the TLB TranslationEntry is dirty - If so, Swap In
-		if (tlbEntry.dirty) {
+		if (tlbEntry.dirty) {                    // Is in memory
 
-		} else {
+		} else if(vpn < vpnCoffMap.size()) {     // Is coff section
 			// Check vpn belongs to a CoffSection
-			if (vpn < coff.getNumSections()) {
-				CoffSection section = vpnCoffMap.get(vpn);
-				pageTable[vpn].readOnly = section.isReadOnly();
-				section.loadPage(vpn - section.getFirstVPN(), entry.ppn);
-			}
+			CoffSection section = vpnCoffMap.get(vpn);
+			pageTable[vpn].readOnly = section.isReadOnly();
+			section.loadPage(vpn - section.getFirstVPN(), entry.ppn); 
+		} else {  // Not a COFF section, zero out stack page
+			// Get memory, for that section of memory (bytes from start index to startIndex + page size), 0
+	    	byte[] memory = Machine.processor().getMemory();
+	    	for(int i=0;i<pageSize;i++) {
+	    		memory[assignedPPN*pageSize + i] = 0;
+	    	}
+
+			
 		}
+		
 
 		// Update Page Table and IPT
+		System.out.println("vpn: " + vpn);
 		pageTable[vpn] = entry;
+		System.out.println("pagetableValid: " + pageTable[vpn].valid);
 		VMKernel.iptLock.acquire();
 		VMKernel.ipt[entry.ppn].entry = entry;
 		VMKernel.iptLock.release();
