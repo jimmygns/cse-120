@@ -25,13 +25,13 @@ public class VMKernel extends UserKernel {
 	 */
 	public void initialize(String[] args) {
 		super.initialize(args);
-		freeSwapPages=new LinkedList<Integer>();
-		victim=0;
-		numOfPinnedPages=0;
+		freeSwapPages = new LinkedList<Integer>();
+		victim = 0;
+		numOfPinnedPages = 0;
+
 		ipt = new PageFrame[Machine.processor().getNumPhysPages()];
 		for (int i = 0; i < ipt.length; ++i) {
-			ipt[i] = new PageFrame(-1,new TranslationEntry(-1, -1, false, false,
-					false, false));
+			ipt[i] = new PageFrame(-1,new TranslationEntry(-1, -1, false, false, false, false));
 		}
 		
 		iptLock = new Lock();
