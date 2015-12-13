@@ -25,7 +25,7 @@ public class VMProcess extends UserProcess {
 	 * Called by <tt>UThread.saveState()</tt>.
 	 */
 	public void saveState() {
-		System.out.println("Savestate");
+		//System.out.println("Savestate");
 		super.saveState();
 
 		TranslationEntry entry;
@@ -78,8 +78,8 @@ public class VMProcess extends UserProcess {
 				vpnCoffMap.put(vpn, section);
 			}
 		}
-		System.out.println("COFF sections: " + totalSections);
-		System.out.println("Readonly COFF Sections: " + readOnlySections);
+		//System.out.println("COFF sections: " + totalSections);
+		//System.out.println("Readonly COFF Sections: " + readOnlySections);
 		return true;
 	}
 
@@ -203,7 +203,7 @@ public class VMProcess extends UserProcess {
 
 
 		if (freePageIndex != -1) {
-			System.out.println("Free page!");
+			//System.out.println("Free page!");
 			tlbEntry = new TranslationEntry(vpn, freePageIndex, true, false, false, false);
 		} else {
 			//No free memory, need to evict a page
@@ -241,7 +241,7 @@ public class VMProcess extends UserProcess {
 				VMKernel.victimLock.release();
 			}
 			toEvict = VMKernel.ipt[VMKernel.victim].entry;      // Ref to Victim in the physical page table entry
-			teToString(toEvict);
+			//teToString(toEvict);
 
 			tlbEntry = new TranslationEntry(vpn, toEvict.ppn, true, false, false, false);
 			VMKernel.iptLock.release();
@@ -261,7 +261,7 @@ public class VMProcess extends UserProcess {
 			
 			// Handle swap out if necessary
 			if (toEvict.dirty) {       // Only write to disk if the page is dirty
-				System.out.println("Swap out page " + toEvict.ppn);
+				//System.out.println("Swap out page " + toEvict.ppn);
 				// Search for free swap page, create a new one if you can't find one
 				VMKernel.swapLock.acquire();
 				int spn=-1;
@@ -273,7 +273,7 @@ public class VMProcess extends UserProcess {
 					}
 				}
 				if(spn == -1) {                    // Cannot find free, grow the list
-					System.out.println("Appending swap pages, no free space");
+					//System.out.println("Appending swap pages, no free space");
 					spn = VMKernel.freeSwapPages.size();
 					VMKernel.freeSwapPages.add(spn);
 				}
@@ -329,17 +329,17 @@ public class VMProcess extends UserProcess {
 				CoffSection section = vpnCoffMap.get(entry.vpn);
 				section.loadPage(entry.vpn - section.getFirstVPN(), tlbEntry.ppn);
 			} else if(swapTable.containsKey(entry.vpn)) {
-				System.out.println("Swap in page " + tlbEntry.ppn);
+				//System.out.println("Swap in page " + tlbEntry.ppn);
 					// Read swap to get data
 					byte[] memory = Machine.processor().getMemory();
 					// entry.ppn currently refers to entry's swp, tlbEntry refers to ppn
 					VMKernel.freeSwapPages.set(swapTable.get(entry.vpn),null);
 					if(VMKernel.swap.read(swapTable.get(entry.vpn)*pageSize, memory, tlbEntry.ppn*pageSize, pageSize) <= 0) {
-						System.out.println("Error, did not read memory"); // TODO change error
+						//System.out.println("Error, did not read memory"); // TODO change error
 					}
 					entry.dirty = false;   // No longer dirty since paging in
 			} else { // Zero bits
-				System.out.println("zero out unwritten: " + entry.vpn);
+				//System.out.println("zero out unwritten: " + entry.vpn);
 				byte[] memory = Machine.processor().getMemory();
 				for (int i = 0; i < pageSize; ++i) {
 					memory[tlbEntry.ppn * pageSize + i] = 0;
@@ -351,7 +351,7 @@ public class VMProcess extends UserProcess {
 		VMKernel.ipt[tlbEntry.ppn].entry.used = tlbEntry.used;
 		VMKernel.ipt[tlbEntry.ppn].entry.dirty = tlbEntry.dirty;
 		VMKernel.iptLock.release();
-		teToString(tlbEntry);
+		//teToString(tlbEntry);
 
 		return tlbEntry;
 	}
@@ -385,14 +385,14 @@ public class VMProcess extends UserProcess {
 	}
 
 	public static void teToString(TranslationEntry t){
-		System.out.println("///Process////");
-		System.out.println("VPN: " + t.vpn);
-		System.out.println("PPN: " + t.ppn);
-		System.out.println("Valid: " + t.valid);
-		System.out.println("ReadOnly: " + t.readOnly);
-		System.out.println("Used: " + t.used);
-		System.out.println("Dirty: " + t.dirty);
-		System.out.println();
+		//System.out.println("///Process////");
+		//System.out.println("VPN: " + t.vpn);
+		//System.out.println("PPN: " + t.ppn);
+		//System.out.println("Valid: " + t.valid);
+		//System.out.println("ReadOnly: " + t.readOnly);
+		//System.out.println("Used: " + t.used);
+		//System.out.println("Dirty: " + t.dirty);
+		//System.out.println();
 	}
 	
 	

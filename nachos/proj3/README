@@ -1,0 +1,4 @@
+Summary: During a TLB miss, we checked for invalid entries in the TLB to write to. If none were found, we synced what was in the TLB back into the process's page table and inverted page table.
+
+Jinye Xu: I understand all the concepts and basically wrote most of the code for demanding page and TLB management. I also contributed on other parts of this project, brainstorming with my parterners and thinking of all the possible edge cases. 
+Charles Cruz: Worked on the handlePageFault and handleTLBMiss debugging with Aaron. We were able to get our code to work for swap1, swap4, and swap5 by writing to the TLBEntry as we synced before page eviction.
