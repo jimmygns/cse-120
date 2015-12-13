@@ -839,7 +839,7 @@ public class UserProcess {
 		
 		// Synch to tlb and ipt
 		entry.used = true;
-		VMKernel.pinPage(entry.ppn);
+		//VMKernel.pinPage(entry.ppn);
 		return entry.ppn;
 	}
 
