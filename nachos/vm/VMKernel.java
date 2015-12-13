@@ -60,9 +60,9 @@ public class VMKernel extends UserKernel {
 	 * Terminate this kernel. Never returns.
 	 */
 	public void terminate() {
-		super.terminate();
 		swap.close();
 		ThreadedKernel.fileSystem.remove("swap");
+		super.terminate();
 	}
 
 	public static void pinPage(int ppn) {
