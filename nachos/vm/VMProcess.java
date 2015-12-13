@@ -88,15 +88,24 @@ public class VMProcess extends UserProcess {
 	 */
 	protected void unloadSections() {
 		// Set process for all pages in ipt to null
-//		VMKernel.iptLock.acquire();   TODO release physical pages
-//		// Go through every physical page, and every page owned by this process, set to null
+		VMKernel.iptLock.acquire(); //  TODO release physical pages
+		// Go through every physical page, and every page owned by this process, set to null
 //		for(int i=0;i<VMKernel.ipt.length;i++) {
 //			PageFrame pf = VMKernel.ipt[i];
-//			if(pf.process==this) {
-//				pf.process = null;
+//			if(pf.entry==pageTable[pf.entry.vpn]) {
+//				pf.entry = null;
 //			}
 //		}
-//		VMKernel.iptLock.release();
+		VMKernel.iptLock.release();
+		// Release swap pages
+		VMKernel.swapLock.acquire();
+		for(int i=0;i<pageTable.length;i++) {
+			if(swapTable.containsKey(i)) {
+				VMKernel.freeSwapPages.set(swapTable.get(i), null);
+				swapTable.remove(i);
+			}
+		}
+		VMKernel.swapLock.release();
 		super.unloadSections();
 	}
 
@@ -174,9 +183,6 @@ public class VMProcess extends UserProcess {
 		for(int i=0;i<Machine.processor().getTLBSize();i++){
 			syncEntry = Machine.processor().readTLBEntry(i);
 			if(syncEntry.valid){
-				if(syncEntry.dirty) {
-					System.out.println("DIRTY!");
-				}
 				// Sync ipt entry ref
 				VMKernel.iptLock.acquire();
 				syncEntry(VMKernel.ipt[syncEntry.ppn].entry,syncEntry);
@@ -270,6 +276,7 @@ public class VMProcess extends UserProcess {
 			System.out.println("Evict Page: " + toEvict.ppn);
 			// Handle swap out if necessary
 			if (toEvict.dirty) {       // Only write to disk if the page is dirty
+				System.out.println("Dirty Swapout");
 				// Search for free swap page, create a new one if you can't find one
 				VMKernel.swapLock.acquire();
 				int spn=-1;
@@ -291,17 +298,26 @@ public class VMProcess extends UserProcess {
 				VMKernel.swapLock.release();
 
 				//Invalidate PTE and TLB entry of the victim page
+				// Invalidate PTE entry
 				toEvict.valid=false;
-				toEvict.ppn = spn; // Store spn in ppn val
+				
+				// If victim page is in TLB, invalidate it
+				for( int i = 0; i < Machine.processor().getTLBSize(); ++i ){
+					TranslationEntry et = Machine.processor().readTLBEntry(i);
+					if(et.valid){
+							if(et.vpn == toEvict.vpn){
+								Machine.processor().writeTLBEntry(i,new TranslationEntry(0,-1,false,false,false,false));
+								break;
+							}
+					}
+				}
+				swapTable.put(toEvict.vpn,spn);
+				toEvict.ppn = -2; // Store spn in ppn val
 			}
 			
 		}
 
-		// Now read the appropriate data into memory
-		
-		// TODO do we need lock for machine processor memory?
-		
-		
+		// Now read the appropriate data into memory		
 		System.out.println("Swapinto: " + tlbEntry.ppn);
 		// Check if the TLB TranslationEntry is dirty - If so, Swap In, already checks for
 		if (entry.ppn==-1) {
@@ -325,17 +341,25 @@ public class VMProcess extends UserProcess {
 //				System.out.println("2nd Load COFF ReadOnly");
 				CoffSection section = vpnCoffMap.get(entry.vpn);
 				section.loadPage(entry.vpn - section.getFirstVPN(), tlbEntry.ppn);
-			} else {
+			} else if(swapTable.containsKey(entry.vpn)) {
 				// Read from swap if dirty
 					// Read swap to get data
 //					System.out.println("Swap in");
 					byte[] memory = Machine.processor().getMemory();
 					// entry.ppn currently refers to entry's swp, tlbEntry refers to ppn
-					VMKernel.freeSwapPages.set(entry.ppn,null);
-					if(VMKernel.swap.read(entry.ppn*pageSize, memory, tlbEntry.ppn*pageSize, pageSize) <= 0) {
+					VMKernel.freeSwapPages.set(swapTable.get(entry.vpn),null);
+					if(VMKernel.swap.read(swapTable.get(entry.vpn)*pageSize, memory, tlbEntry.ppn*pageSize, pageSize) <= 0) {
 						System.out.println("Error, did not read memory"); // TODO change error
 					}
 					entry.dirty = false;   // No longer dirty since paging in
+			} else { // Zero bits
+				System.out.println("zero out unwritten: " + entry.vpn);
+				byte[] memory = Machine.processor().getMemory();
+				for (int i = 0; i < pageSize; ++i) {
+					memory[tlbEntry.ppn * pageSize + i] = 0;
+				}
+				entry.dirty=true;
+				
 			}
 		
 		}
@@ -382,9 +406,13 @@ public class VMProcess extends UserProcess {
 
 	private HashMap<Integer, CoffSection> vpnCoffMap = new HashMap<>();
 
+	private HashMap<Integer,Integer> swapTable = new HashMap<Integer,Integer>();
+	
 	private static final int pageSize = Processor.pageSize;
 
 	private static final char dbgProcess = 'a';
 
 	private static final char dbgVM = 'v';
+	
+	
 }
