@@ -28,6 +28,7 @@ public class VMProcess extends UserProcess {
 		super.saveState();
 
 		TranslationEntry entry;
+		// Sync all entries and flush
 		for (int i = 0; i < Machine.processor().getTLBSize(); ++i) {
 			entry = Machine.processor().readTLBEntry(i);
 
@@ -174,7 +175,6 @@ public class VMProcess extends UserProcess {
 		TranslationEntry tlbEntry;
 		int vpn = entry.vpn;
 		int freePageIndex = -1;
-		int newPPN;
 
 		// Go through all entries of the ipt and try to look for a null val
 		VMKernel.iptLock.acquire();
@@ -226,16 +226,6 @@ public class VMProcess extends UserProcess {
 
 						VMKernel.victimLock.release();
 					} else {
-						// Still increment clock on page replacement
-						VMKernel.victimLock.acquire();
-						VMKernel.victim = (VMKernel.victim + 1) % VMKernel.ipt.length;
-
-						// Make sure victim value does not exceed max
-						if (VMKernel.victim == Integer.MAX_VALUE) {
-							VMKernel.victim = 0;
-						}
-
-						VMKernel.victimLock.release();
 						break;
 					}
 				} else {
@@ -251,10 +241,22 @@ public class VMProcess extends UserProcess {
 				}
 			}
 
+			
 			toEvict = VMKernel.ipt[VMKernel.victim].entry;      // Ref to Victim in the physical page table entry
-			newPPN = toEvict.ppn;
 			tlbEntry = new TranslationEntry(vpn, toEvict.ppn, true, false, false, false);
 
+			// Increment victim
+			VMKernel.victimLock.acquire();
+			VMKernel.victim = (VMKernel.victim + 1) % VMKernel.ipt.length;
+
+			// Make sure victim value does not exceed max
+			if (VMKernel.victim == Integer.MAX_VALUE) {
+				VMKernel.victim = 0;
+			}
+
+			VMKernel.victimLock.release();
+			
+			
 			System.out.println("Evict Page: " + toEvict.ppn);
 			// Handle swap out if necessary
 			if (toEvict.dirty) {       // Only write to disk if the page is dirty
@@ -347,6 +349,14 @@ public class VMProcess extends UserProcess {
 		VMKernel.iptLock.release();
 
 		return tlbEntry;
+	}
+	
+	public int pinVirtualPage(int vpn, boolean isUserWrite) {
+		return 3;
+	}
+	
+	public void unpinVirtualPage(int vpn){
+		
 	}
 
 	/*
