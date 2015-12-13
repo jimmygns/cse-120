@@ -226,6 +226,16 @@ public class VMProcess extends UserProcess {
 
 						VMKernel.victimLock.release();
 					} else {
+						// Still increment clock on page replacement
+						VMKernel.victimLock.acquire();
+						VMKernel.victim = (VMKernel.victim + 1) % VMKernel.ipt.length;
+
+						// Make sure victim value does not exceed max
+						if (VMKernel.victim == Integer.MAX_VALUE) {
+							VMKernel.victim = 0;
+						}
+
+						VMKernel.victimLock.release();
 						break;
 					}
 				} else {
@@ -241,21 +251,10 @@ public class VMProcess extends UserProcess {
 				}
 			}
 
-			
 			toEvict = VMKernel.ipt[VMKernel.victim].entry;      // Ref to Victim in the physical page table entry
 			tlbEntry = new TranslationEntry(vpn, toEvict.ppn, true, false, false, false);
 
-			// Increment victim
-			VMKernel.victimLock.acquire();
-			VMKernel.victim = (VMKernel.victim + 1) % VMKernel.ipt.length;
 
-			// Make sure victim value does not exceed max
-			if (VMKernel.victim == Integer.MAX_VALUE) {
-				VMKernel.victim = 0;
-			}
-
-			VMKernel.victimLock.release();
-			
 			
 			System.out.println("Evict Page: " + toEvict.ppn);
 			// Handle swap out if necessary
@@ -351,12 +350,14 @@ public class VMProcess extends UserProcess {
 		return tlbEntry;
 	}
 	
-	public int pinVirtualPage(int vpn, boolean isUserWrite) {
-		return 3;
+	protected int pinVirtualPage(int vpn, boolean isUserWrite) {
+		return 0;
 	}
-	
-	public void unpinVirtualPage(int vpn){
-		
+
+	protected void unpinVirtualPage(int vpn) {
+		// TODO unpin the physical page
+		// TODO wake up the sleeping threads on edge case
+		// conditionVariable.wakeAll();
 	}
 
 	/*
