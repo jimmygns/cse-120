@@ -687,7 +687,7 @@ public class UserProcess {
 			parentProcess.childFinished.wake();
 		}
 
-		System.out.println("Exit status: " + status); // TODO remove
+//		System.out.println("Exit status: " + status); // TODO remove
 		
 		// If last process, halt the whole machine
 		if (--UserKernel.numRunningProcesses == 0) {

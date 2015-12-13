@@ -88,7 +88,7 @@ public class VMProcess extends UserProcess {
 	 */
 	protected void unloadSections() {
 		// Set process for all pages in ipt to null
-		VMKernel.iptLock.acquire(); //  TODO release physical pages
+//		VMKernel.iptLock.acquire(); //  TODO release physical pages
 		// Go through every physical page, and every page owned by this process, set to null
 //		for(int i=0;i<VMKernel.ipt.length;i++) {
 //			PageFrame pf = VMKernel.ipt[i];
@@ -96,7 +96,7 @@ public class VMProcess extends UserProcess {
 //				pf.entry = null;
 //			}
 //		}
-		VMKernel.iptLock.release();
+//		VMKernel.iptLock.release();
 		// Release swap pages
 		VMKernel.swapLock.acquire();
 		for(int i=0;i<pageTable.length;i++) {
