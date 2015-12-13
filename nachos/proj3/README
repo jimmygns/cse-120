@@ -1,4 +1,22 @@
-Summary: During a TLB miss, we checked for invalid entries in the TLB to write to. If none were found, we synced what was in the TLB back into the process's page table and inverted page table.
+Project 3 README
+Aaron Leong - a3leong
+Charles Cruz - c8cruz
+Jinye Xu - cse120fbf
 
-Jinye Xu: I understand all the concepts and basically wrote most of the code for demanding page and TLB management. I also contributed on other parts of this project, brainstorming with my parterners and thinking of all the possible edge cases. 
-Charles Cruz: Worked on the handlePageFault and handleTLBMiss debugging with Aaron. We were able to get our code to work for swap1, swap4, and swap5 by writing to the TLBEntry as we synced before page eviction.
+Summary: We wrote nachos implementation to handle TLB misses in VMProcess. If a process was not found in the TLB, the translationEntry caushing the miss
+         is placed into the TLB. If the page that caused the TLB miss is not valid, then handlePageFault is called to create a new TranslationEntry which
+         is just a copy of the TranslationEntry causing the miss but it has a PPN assigned to it.
+         Assigning pages either allocates a free page or evicts a page currently in physical memory.
+         If a page is evicted it might be written to a swap file if the dirty bit is set.
+         After we get allocate a page in physical memory, we load the data into physical memory. If the page was not stored in the swap file,
+         it is either loaded from the COFF or zeroed. An inverted page table is used to keep track of references to TranslationEntry's stored
+         in a VMProcess PageTable. A spnTable hashmap is used to keep track of which pages in a PageTable hold data in the swap file.
+         We also wrote barebones code for pinpages, so that a pinned page is never evicted from physical memory. If all pages are pinned when
+         a file is looking for a page, it sleeps using a condition variable. When we call unpin pages, we call wakeAll on that condition.
+         If we evict a page in physical memory, we use an NRU (LRU clock) algorithm to determine that. Have mercy on our souls.
+
+Aaron Leong: I refactored most of the code and fixed errors involving synching and the clock algorithm. Most of my involvement was on parts 2 and 3.
+Jinye Xu: I understand all the concepts and basically wrote most of the code for demanding page and TLB management. 
+I also contributed on other parts of this project, brainstorming with my parterners and thinking of all the possible edge cases. 
+Charles Cruz: Worked on the handlePageFault and handleTLBMiss debugging with Aaron.
+We were able to get our code to work for swap1, swap4, and swap5 by writing to the TLB before we did the page eviction.
